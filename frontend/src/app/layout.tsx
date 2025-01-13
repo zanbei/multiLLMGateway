@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import "./globals.css";
 import "@cloudscape-design/global-styles/index.css";
+import ClientLayout from "./layout.client";
 
 export const metadata: Metadata = {
   title: "Bedrock CN",
@@ -13,8 +13,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html>
+      <body>
+        <ClientLayout>{children}</ClientLayout>
+      </body>
     </html>
   );
 }
