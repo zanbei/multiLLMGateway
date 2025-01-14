@@ -51,6 +51,7 @@ export default function ClientLayout({
           />
         }
         content={children}
+        toolsHide={true}
       />
     </I18nProvider>
   );
