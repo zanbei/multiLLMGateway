@@ -22,7 +22,7 @@ const modelId = "anthropic.claude-3-haiku-20240307-v1:0";
 export default function Chat() {
   const [prompt, setPrompt] = useState("");
   const [promptDisabled, setPromptDisabled] = useState(false);
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState([] as Message[]);
 
   async function converse(messages: Message[]) {
     const bedrock = new BedrockRuntimeClient({
@@ -101,7 +101,10 @@ export default function Chat() {
                   ariaLabel="Load examples"
                   iconName="folder"
                   variant="icon"
-                  onClick={() => setMessages(INITIAL_MESSAGES.slice())}
+                  onClick={() => {
+                    setPromptDisabled(true);
+                    setMessages(INITIAL_MESSAGES.slice());
+                  }}
                 >
                   Examples
                 </Button>
@@ -109,7 +112,10 @@ export default function Chat() {
                   ariaLabel="Clear"
                   iconName="remove"
                   variant="icon"
-                  onClick={() => setMessages([])}
+                  onClick={() => {
+                    setMessages([]);
+                    setPromptDisabled(false);
+                  }}
                 ></Button>
               </div>
             }
