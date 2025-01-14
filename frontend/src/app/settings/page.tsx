@@ -14,11 +14,15 @@ import {
 } from "@cloudscape-design/components";
 
 export default function Settings() {
-  const [ak, setAk] = React.useState(window.localStorage.getItem("AK") ?? "");
-  const [sk, setSk] = React.useState(window.localStorage.getItem("SK") ?? "");
-  const [endpoint, setEndpoint] = React.useState(
-    window.localStorage.getItem("ENDPOINT") ?? ""
-  );
+  const [ak, setAk] = React.useState("");
+  const [sk, setSk] = React.useState("");
+  const [endpoint, setEndpoint] = React.useState("");
+
+  React.useEffect(() => {
+    setAk(localStorage.getItem("AK") ?? "");
+    setSk(localStorage.getItem("SK") ?? "");
+    setEndpoint(localStorage.getItem("ENDPOINT") ?? "");
+  }, []);
 
   return (
     <div>
