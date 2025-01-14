@@ -32,6 +32,14 @@ export default function Chat() {
               <div style={{ display: "flex" }}>
                 <Header variant="h3">Generative AI chat</Header>
                 <Button
+                  ariaLabel="Load examples"
+                  iconName="folder"
+                  variant="icon"
+                  onClick={() => setMessages(INITIAL_MESSAGES.slice())}
+                >
+                  Examples
+                </Button>
+                <Button
                   ariaLabel="Clear"
                   iconName="remove"
                   variant="icon"
