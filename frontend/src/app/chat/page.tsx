@@ -6,6 +6,7 @@ import {
   BreadcrumbGroup,
   FormField,
   PromptInput,
+  Button,
 } from "@cloudscape-design/components";
 import { useState } from "react";
 import Messages from "./messages";
@@ -27,7 +28,17 @@ export default function Chat() {
       <ContentLayout>
         <div style={{ height: "100%" }}>
           <Container
-            header={<Header variant="h3">Generative AI chat</Header>}
+            header={
+              <div style={{ display: "flex" }}>
+                <Header variant="h3">Generative AI chat</Header>
+                <Button
+                  ariaLabel="Clear"
+                  iconName="remove"
+                  variant="icon"
+                  onClick={() => setMessages([])}
+                ></Button>
+              </div>
+            }
             fitHeight
             disableContentPaddings
             footer={
