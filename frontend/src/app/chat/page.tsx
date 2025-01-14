@@ -31,6 +31,7 @@ export default function Chat() {
         accessKeyId: window.localStorage.getItem("AK")!,
         secretAccessKey: window.localStorage.getItem("SK")!,
       },
+      endpoint: window.localStorage.getItem("ENDPOINT") || undefined,
     });
 
     const response = await bedrock.send(
