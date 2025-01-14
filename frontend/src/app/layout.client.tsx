@@ -35,6 +35,18 @@ export default function ClientLayout({
                   },
                 ],
               },
+              { type: "divider" },
+              {
+                type: "section",
+                text: "Bedrock configurations",
+                items: [
+                  {
+                    type: "link",
+                    text: `Settings`,
+                    href: `/settings`,
+                  },
+                ],
+              },
             ]}
           />
         }
