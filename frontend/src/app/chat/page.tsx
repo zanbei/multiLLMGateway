@@ -98,7 +98,7 @@ export default function Chat() {
               <div style={{ display: "flex" }}>
                 <Header variant="h3">Generative AI chat</Header>
                 <Button
-                  ariaLabel="Load examples"
+                  ariaLabel="Load the example"
                   iconName="folder"
                   variant="icon"
                   onClick={() => {
@@ -109,8 +109,8 @@ export default function Chat() {
                   Examples
                 </Button>
                 <Button
-                  ariaLabel="Clear"
-                  iconName="remove"
+                  ariaLabel="Start a new conversation"
+                  iconName="add-plus"
                   variant="icon"
                   onClick={() => {
                     setMessages([]);
