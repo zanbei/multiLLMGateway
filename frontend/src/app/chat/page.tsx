@@ -55,6 +55,7 @@ export default function Chat() {
                   value={prompt}
                   onChange={({ detail }) => setPrompt(detail.value)}
                   // onAction={onPromptSend}
+                  actionButtonAriaLabel="Send"
                   actionButtonIconName="send"
                   placeholder="Ask a question"
                   autoFocus
