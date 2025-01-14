@@ -52,8 +52,9 @@ export default function Chat() {
       if (chunk?.delta?.text) {
         const message = chunk.delta.text.toString();
         if (message) {
-          messages.at(-1)!.content += message;
-          setMessages(messages);
+          const ms = messages.slice();
+          ms.at(-1)!.content += message;
+          setMessages(ms);
         }
       }
     }
