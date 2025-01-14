@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.726.1",
     "@cloudscape-design/chat-components": "^1.0.19",
     "@cloudscape-design/code-view": "^3.0.36",
     "@cloudscape-design/components": "^3.0.866",
