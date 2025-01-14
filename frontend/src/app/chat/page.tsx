@@ -28,8 +28,8 @@ export default function Chat() {
     const bedrock = new BedrockRuntimeClient({
       region: "us-east-1",
       credentials: {
-        accessKeyId: window.localStorage.getItem("AK")!,
-        secretAccessKey: window.localStorage.getItem("SK")!,
+        accessKeyId: window.localStorage.getItem("AK") ?? "",
+        secretAccessKey: window.localStorage.getItem("SK") ?? "",
       },
       endpoint: window.localStorage.getItem("ENDPOINT") || undefined,
     });
@@ -76,12 +76,23 @@ export default function Chat() {
       setPrompt("");
       setPromptDisabled(true);
 
-      converse(newMessages).finally(() => {
-        setPromptDisabled(false);
-        const msg = newMessages.at(-1)!;
-        if (msg.type == "chat-bubble") msg.avatarLoading = false;
-        setMessages(newMessages);
-      });
+      converse(newMessages)
+        .then(() => {
+          setPromptDisabled(false);
+          const ms = newMessages.slice();
+          const msg = ms.at(-1)!;
+          if (msg.type == "chat-bubble") msg.avatarLoading = false;
+          setMessages(ms);
+        })
+        .catch((e) => {
+          console.error(e);
+          const ms = newMessages.slice();
+          ms.push({
+            type: "alert",
+            content: e.message,
+          });
+          setMessages(ms);
+        });
     }
   }
 
