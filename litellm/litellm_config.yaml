@@ -1,0 +1,31 @@
+model_list:
+ - model_name: deepseek-chat
+   litellm_params:
+     model: deepseek/deepseek-chat
+     api_key:
+     api_base: https://api.deepseek.com/
+
+  - model_name: anthropic.claude-3-5-sonnet-20241022-v2:0
+    litellm_params:
+      model: bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0
+#      aws_access_key_id: os.environ/GLOBAL_AWS_ACCESS_KEY_ID
+#      aws_secret_access_key: os.environ/GLOBAL_AWS_SECRET_ACCESS_KEY
+#      aws_region_name: os.environ/GLOBAL_AWS_DEFAULT_REGION
+
+  - model_name: amazon.nova-pro-v1:0
+    litellm_params:
+      model: bedrock/amazon.nova-pro-v1:0
+#      aws_access_key_id: os.environ/GLOBAL_AWS_ACCESS_KEY_ID
+#      aws_secret_access_key: os.environ/GLOBAL_AWS_SECRET_ACCESS_KEY
+#      aws_region_name: os.environ/GLOBAL_AWS_DEFAULT_REGION
+
+  - model_name: amazon.nova-lite-v1:0
+    litellm_params:
+      model: bedrock/amazon.nova-lite-v1:0
+
+# general_settings:
+#     alerting: ["slack"]
+general_settings:
+#  database_url: ""
+#  allow_requests_on_db_unavailable: true
+  master_key: sk-7654
