@@ -13,12 +13,12 @@ import { StackProps } from 'aws-cdk-lib';
 
 const app = new cdk.App(); 
 
-export class CdkStack extends cdk.Stack {
+export class LitellmStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
     const vpc = new ec2.Vpc(this, 'MyVpc', {
-      maxAzs: 3, // Maximum Availability Zones
+      maxAzs: 2, // Maximum Availability Zones
     });
 
     const securityGroup = new ec2.SecurityGroup(this, 'MySecurityGroup', {
@@ -29,12 +29,13 @@ export class CdkStack extends cdk.Stack {
     
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow HTTP traffic');
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(4000), 'Allow HTTPS traffic');
-    
+    const suffix = Math.random().toString(36).substring(2, 6);
+
     const ecrRepo = new ecr.Repository(this, 'MyECR', {
-      repositoryName: 't_litellm',
+      repositoryName: `litellm-${suffix}`,
     });
 
-    const suffix = Math.random().toString(36).substring(2, 6);
+    
     
     const configBucket = new s3.Bucket(this, 'ConfigBucket', {
       bucketName: `bedrock-china-${suffix}`,
@@ -46,7 +47,7 @@ export class CdkStack extends cdk.Stack {
     });
 
     // 创建 RDS Serverless 集群
-    const rdsCluster = new rds.ServerlessCluster(this, 'MyAuroraCluster', {
+    const rdsCluster = new rds.ServerlessCluster(this, `litellm_${suffix}`, {
       engine: rds.DatabaseClusterEngine.AURORA_POSTGRESQL,
       vpc: vpc,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
@@ -66,7 +67,7 @@ export class CdkStack extends cdk.Stack {
     ecsTaskExecutionRole.addManagedPolicy(iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonS3ReadOnlyAccess'));
 
     const ecsCluster = new ecs.Cluster(this, 'LitellmCluster', {
-      clusterName: 'litellm-cluster',
+      clusterName: `litellm_${suffix}`,
       vpc: vpc,
     });
 
@@ -110,5 +111,5 @@ export class CdkStack extends cdk.Stack {
   }
 }
 
-new CdkStack(app, 'CdkStack', {
+new LitellmStack(app, 'BackLlm', {
 });
