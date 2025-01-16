@@ -2,17 +2,21 @@ import json
 import time
 import traceback
 import litellm
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import Annotated
+from botocore.exceptions import ClientError, BotoCoreError
 
 from ..models.request_models import ConverseRequest
 from ..models.response_models import ConverseResponse
 from ..utils.bedrock import get_bedrock_models, get_bedrock_client
 from ..utils.message_mapper import map_to_deepseek_messages, map_deepseek_to_bedrock_response
+from ..utils.bedrock_mapper import map_request_to_bedrock_params
 from .auth import get_api_key
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/model/{model_id}/converse")
 async def converse(
@@ -21,25 +25,48 @@ async def converse(
     api_key: Annotated[str, Depends(get_api_key)]
 ) -> ConverseResponse:
     start_time = time.time()
+    request_id = f"req_{int(start_time * 1000)}"
+    logger.info(f"[{request_id}] Starting converse request for model: {model_id}")
 
     try:
         # Check if model is available in Bedrock
         bedrock_models = get_bedrock_models()
         if model_id in bedrock_models:
-            # Use Bedrock API directly
+            logger.debug(f"[{request_id}] Using Bedrock API for model: {model_id}")
             bedrock_runtime = get_bedrock_client()
 
-            # Forward the request directly
-            response = bedrock_runtime.converse(
-                modelId=model_id,
-                body=json.dumps(request.dict())
-            )
+            try:
+                # Map request to Bedrock parameters
+                request_params = map_request_to_bedrock_params(model_id, request)
+                logger.debug(f"[{request_id}] Bedrock request params: {json.dumps(request_params)}")
 
-            return ConverseResponse(**json.loads(response['body'].read()))
+                # Forward the request with proper parameters
+                response = bedrock_runtime.converse(**request_params)
+
+                # Log response details
+                response_body = json.loads(response['body'].read())
+                logger.debug(f"[{request_id}] Bedrock response: {json.dumps(response_body)}")
+                logger.info(f"[{request_id}] Successfully completed Bedrock request in {time.time() - start_time:.2f}s")
+
+                return ConverseResponse(**response_body)
+
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                error_message = e.response['Error']['Message']
+                logger.error(f"[{request_id}] AWS ClientError: {error_code} - {error_message}")
+                raise
+            except BotoCoreError as e:
+                logger.error(f"[{request_id}] AWS BotoCoreError: {str(e)}")
+                raise
+            except Exception as e:
+                logger.error(f"[{request_id}] Unexpected Bedrock error: {str(e)}", exc_info=True)
+                raise
 
         elif model_id.startswith("deepseek"):
+            logger.debug(f"[{request_id}] Using Deepseek API for model: {model_id}")
             # Convert request format for Deepseek
             messages = map_to_deepseek_messages(request)
+            logger.debug(f"[{request_id}] Mapped messages for Deepseek: {messages}")
 
             # Map inference config
             kwargs = {}
@@ -52,6 +79,7 @@ async def converse(
                     kwargs["top_p"] = request.inferenceConfig.topP
                 if request.inferenceConfig.stopSequences:
                     kwargs["stop"] = request.inferenceConfig.stopSequences
+                logger.debug(f"[{request_id}] Deepseek inference config: {kwargs}")
 
             # Call Deepseek API through litellm
             response = await litellm.acompletion(
@@ -60,11 +88,15 @@ async def converse(
                 api_key=api_key,
                 **kwargs
             )
+            logger.debug(f"[{request_id}] Deepseek response: {response}")
 
             # Convert response back to Bedrock format
-            return map_deepseek_to_bedrock_response(response, start_time)
+            bedrock_response = map_deepseek_to_bedrock_response(response, start_time)
+            logger.info(f"[{request_id}] Successfully completed Deepseek request in {time.time() - start_time:.2f}s")
+            return bedrock_response
 
         else:
+            logger.error(f"[{request_id}] Model not found: {model_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Model {model_id} not found in either Bedrock or Deepseek"
@@ -73,6 +105,7 @@ async def converse(
     except Exception as e:
         error_traceback = traceback.format_exc()
         error_message = str(e)
+        logger.error(f"[{request_id}] Error processing request: {error_message}\n{error_traceback}")
 
         if "ResourceNotFoundException" in error_message:
             raise HTTPException(status_code=404, detail=error_message)
@@ -93,23 +126,37 @@ async def converse_stream(
     request: ConverseRequest,
     api_key: Annotated[str, Depends(get_api_key)]
 ):
+    start_time = time.time()
+    request_id = f"req_{int(start_time * 1000)}"
+    logger.info(f"[{request_id}] Starting streaming request for model: {model_id}")
+
     try:
         # Check if model is available in Bedrock
         bedrock_models = get_bedrock_models()
         if model_id in bedrock_models:
-            # Use Bedrock API directly
+            logger.debug(f"[{request_id}] Using Bedrock streaming API for model: {model_id}")
             bedrock_runtime = get_bedrock_client()
 
             async def generate():
-                # Forward the request directly
-                response = bedrock_runtime.converse_stream(
-                    modelId=model_id,
-                    body=json.dumps(request.dict())
-                )
+                try:
+                    # Map request to Bedrock parameters
+                    request_params = map_request_to_bedrock_params(model_id, request)
+                    logger.debug(f"[{request_id}] Bedrock streaming request params: {json.dumps(request_params)}")
 
-                async for event in response['body']:
-                    if event.get('chunk'):
-                        yield f"data: {json.dumps(event['chunk'])}\n\n"
+                    # Forward the request with proper parameters
+                    response = bedrock_runtime.converse_stream(**request_params)
+
+                    async for event in response['body']:
+                        if event.get('chunk'):
+                            chunk_data = event['chunk']
+                            logger.debug(f"[{request_id}] Received Bedrock chunk: {json.dumps(chunk_data)}")
+                            yield f"data: {json.dumps(chunk_data)}\n\n"
+
+                    logger.info(f"[{request_id}] Successfully completed Bedrock streaming request in {time.time() - start_time:.2f}s")
+
+                except Exception as e:
+                    logger.error(f"[{request_id}] Error in Bedrock stream: {str(e)}", exc_info=True)
+                    raise
 
             return StreamingResponse(
                 generate(),
@@ -117,8 +164,10 @@ async def converse_stream(
             )
 
         elif model_id.startswith("deepseek"):
+            logger.debug(f"[{request_id}] Using Deepseek streaming API for model: {model_id}")
             # Convert request format for Deepseek
             messages = map_to_deepseek_messages(request)
+            logger.debug(f"[{request_id}] Mapped messages for Deepseek streaming: {messages}")
 
             # Map inference config
             kwargs = {
@@ -133,36 +182,50 @@ async def converse_stream(
                     kwargs["top_p"] = request.inferenceConfig.topP
                 if request.inferenceConfig.stopSequences:
                     kwargs["stop"] = request.inferenceConfig.stopSequences
+                logger.debug(f"[{request_id}] Deepseek streaming inference config: {kwargs}")
 
             async def generate():
-                content_block_index = 0
+                try:
+                    content_block_index = 0
 
-                # Send message start event
-                yield "data: " + json.dumps({
-                    "type": "message_start",
-                    "message": {"role": "assistant"}
-                }) + "\n\n"
+                    # Send message start event
+                    start_event = {
+                        "type": "message_start",
+                        "message": {"role": "assistant"}
+                    }
+                    logger.debug(f"[{request_id}] Sending start event: {json.dumps(start_event)}")
+                    yield "data: " + json.dumps(start_event) + "\n\n"
 
-                response = await litellm.acompletion(
-                    model=model_id,
-                    messages=messages,
-                    api_key=api_key,
-                    **kwargs
-                )
+                    response = await litellm.acompletion(
+                        model=model_id,
+                        messages=messages,
+                        api_key=api_key,
+                        **kwargs
+                    )
 
-                async for chunk in response:
-                    if chunk.choices[0].delta.content:
-                        yield "data: " + json.dumps({
-                            "type": "content_block_delta",
-                            "index": content_block_index,
-                            "delta": {"text": chunk.choices[0].delta.content}
-                        }) + "\n\n"
+                    async for chunk in response:
+                        if chunk.choices[0].delta.content:
+                            chunk_event = {
+                                "type": "content_block_delta",
+                                "index": content_block_index,
+                                "delta": {"text": chunk.choices[0].delta.content}
+                            }
+                            logger.debug(f"[{request_id}] Sending chunk: {json.dumps(chunk_event)}")
+                            yield "data: " + json.dumps(chunk_event) + "\n\n"
 
-                # Send final events
-                yield "data: " + json.dumps({
-                    "type": "message_stop",
-                    "message": {"role": "assistant"}
-                }) + "\n\n"
+                    # Send final events
+                    stop_event = {
+                        "type": "message_stop",
+                        "message": {"role": "assistant"}
+                    }
+                    logger.debug(f"[{request_id}] Sending stop event: {json.dumps(stop_event)}")
+                    yield "data: " + json.dumps(stop_event) + "\n\n"
+
+                    logger.info(f"[{request_id}] Successfully completed Deepseek streaming request in {time.time() - start_time:.2f}s")
+
+                except Exception as e:
+                    logger.error(f"[{request_id}] Error in Deepseek stream: {str(e)}", exc_info=True)
+                    raise
 
             return StreamingResponse(
                 generate(),
@@ -170,6 +233,7 @@ async def converse_stream(
             )
 
         else:
+            logger.error(f"[{request_id}] Model not found: {model_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Model {model_id} not found in either Bedrock or Deepseek"
@@ -178,6 +242,7 @@ async def converse_stream(
     except Exception as e:
         error_traceback = traceback.format_exc()
         error_message = str(e)
+        logger.error(f"[{request_id}] Error processing streaming request: {error_message}\n{error_traceback}")
 
         if "ResourceNotFoundException" in error_message:
             raise HTTPException(status_code=404, detail=error_message)
