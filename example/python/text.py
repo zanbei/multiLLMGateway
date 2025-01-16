@@ -17,6 +17,13 @@ logging.basicConfig(level=logging.INFO)
 def add_auth_header(model, params, request_signer, **kwargs):
     params['headers']['x-bedrock-api-key'] = BEDROCK_API_KEY
 
+def get_bedrock_client():
+    bedrock_client = boto3.client(service_name='bedrock-runtime',
+                                    endpoint_url='http://127.0.0.1:8000/')
+    event_system = bedrock_client.meta.events
+    event_system.register('before-call.*', add_auth_header)
+    return bedrock_client
+
 def generate_conversation(bedrock_client,
                           model_id,
                           system_prompts,
@@ -87,10 +94,7 @@ def main():
 
     try:
 
-        bedrock_client = boto3.client(service_name='bedrock-runtime',
-                                      endpoint_url='http://127.0.0.1:8000/')
-        event_system = bedrock_client.meta.events
-        event_system.register('before-call.*', add_auth_header)
+        bedrock_client = get_bedrock_client()
 
         # Start the conversation with the 1st message.
         messages.append(message_1)
