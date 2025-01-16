@@ -1,12 +1,11 @@
 import time
 import logging
 from typing import Dict, Any
-import asyncio
 
-from .handlers.bedrock_handler import BedrockHandler
-from .handlers.openai_handler import OpenAIHandler
+from ..api.handlers.bedrock_handler import BedrockHandler
+from ..api.handlers.openai_handler import OpenAIHandler
 from ..utils.bedrock import get_bedrock_models
-from .model_utils import validate_model
+from ..api.model_utils import validate_model
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +41,3 @@ class Handler:
 
 # Create single handler instance
 handler = Handler()
-
-async def handle_converse(*args, **kwargs):
-    return await handler.handle_request(*args, **kwargs)
-
-async def handle_converse_stream(*args, **kwargs):
-    return await handler.handle_request(*args, stream=True, **kwargs)

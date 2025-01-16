@@ -7,7 +7,15 @@ Shows how to use the <noloc>Converse</noloc> API with Anthropic Claude 3 Sonnet 
 import logging
 import boto3
 
+from botocore.config import Config
 from botocore.exceptions import ClientError
+
+config = Config(
+   retries = {
+      'max_attempts': 1,
+      'mode': 'adaptive'
+   }
+)
 
 BEDROCK_API_KEY="sk-7654"
 
@@ -19,7 +27,7 @@ def add_auth_header(model, params, request_signer, **kwargs):
 
 def get_bedrock_client():
     bedrock_client = boto3.client(service_name='bedrock-runtime',
-                                    endpoint_url='http://127.0.0.1:8000/')
+                                    endpoint_url='http://127.0.0.1:8000/', config=config)
     event_system = bedrock_client.meta.events
     event_system.register('before-call.*', add_auth_header)
     return bedrock_client
@@ -77,7 +85,7 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s: %(message)s")
 
-    model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model_id = "deepseek-chat"
 
     # Setup the system prompts and messages to send to the model.
     system_prompts = [{"text": "You are an app that creates playlists for a radio station that plays rock and pop music."

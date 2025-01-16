@@ -1,18 +1,26 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from ..config.logging_config import setup_logging
 from ..config.app_config import load_config
 from ..api.routes import router
+from .handler import handler
 
 # Set up logging
 logger = setup_logging()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI application"""
+    # Startup
+    load_config()
+    yield
+    # Shutdown
+    await handler.close()
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application"""
-    # Initialize FastAPI app
-    app = FastAPI()
-
-    # Load litellm config
-    load_config()
+    # Initialize FastAPI app with lifespan handler
+    app = FastAPI(lifespan=lifespan)
 
     # Include API routes
     app.include_router(router)

@@ -3,7 +3,7 @@ from typing import Annotated
 
 from ..models.request_models import ConverseRequest
 from .auth import get_api_key
-from .handlers import handle_converse, handle_converse_stream
+from ..core.handler import handler
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ async def converse(
     request: ConverseRequest,
     api_key: Annotated[str, Depends(get_api_key)]
 ):
-    return await handle_converse(model_id, request, api_key)
+    return await handler.handle_request(model_id, request.dict(), api_key)
 
 @router.post("/model/{model_id}/converse-stream")
 async def converse_stream(
@@ -21,4 +21,4 @@ async def converse_stream(
     request: ConverseRequest,
     api_key: Annotated[str, Depends(get_api_key)]
 ):
-    return await handle_converse_stream(model_id, request, api_key)
+    return await handler.handle_request(model_id, request.dict(), api_key, stream=True)
