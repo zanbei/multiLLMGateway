@@ -17,11 +17,13 @@ export default function Settings() {
   const [ak, setAk] = React.useState("");
   const [sk, setSk] = React.useState("");
   const [endpoint, setEndpoint] = React.useState("");
+  const [apiKey, setApiKey] = React.useState("");
 
   React.useEffect(() => {
     setAk(localStorage.getItem("AK") ?? "");
     setSk(localStorage.getItem("SK") ?? "");
     setEndpoint(localStorage.getItem("ENDPOINT") ?? "");
+    setApiKey(localStorage.getItem("BEDROCK_API_KEY") ?? "");
   }, []);
 
   return (
@@ -50,6 +52,7 @@ export default function Settings() {
                     window.localStorage.setItem("AK", ak);
                     window.localStorage.setItem("SK", sk);
                     window.localStorage.setItem("ENDPOINT", endpoint);
+                    window.localStorage.setItem("BEDROCK_API_KEY", apiKey);
                   }}
                 >
                   Save
@@ -79,6 +82,13 @@ export default function Settings() {
                 <Input
                   value={endpoint}
                   onChange={(e) => setEndpoint(e.detail.value)}
+                />
+              </FormField>
+              <FormField label="Bedrock API Key (Optional)">
+                <Input
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.detail.value)}
+                  type="password"
                 />
               </FormField>
             </SpaceBetween>

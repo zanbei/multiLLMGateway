@@ -33,6 +33,20 @@ export default function Chat() {
       },
       endpoint: window.localStorage.getItem("ENDPOINT") || undefined,
     });
+    bedrock.middlewareStack.add(
+      (next) => (args) => {
+        const key = window.localStorage.getItem("BEDROCK_API_KEY");
+        if (key) {
+          (
+            args.request as {
+              headers: { "x-bedrock-api-key": string };
+            }
+          ).headers["x-bedrock-api-key"] = key;
+        }
+        return next(args);
+      },
+      { step: "build" }
+    );
 
     const response = await bedrock.send(
       new ConverseStreamCommand({
