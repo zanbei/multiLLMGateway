@@ -16,6 +16,12 @@ import {
   BedrockRuntimeClient,
   ConverseStreamCommand,
 } from "@aws-sdk/client-bedrock-runtime";
+import {
+  LOCAL_STORAGE_AK_NAME,
+  LOCAL_STORAGE_BEDROCK_API_KEY_NAME,
+  LOCAL_STORAGE_ENDPOINT_NAME,
+  LOCAL_STORAGE_SK_NAME,
+} from "../consts";
 
 const modelId = "anthropic.claude-3-haiku-20240307-v1:0";
 
@@ -28,14 +34,18 @@ export default function Chat() {
     const bedrock = new BedrockRuntimeClient({
       region: "us-east-1",
       credentials: {
-        accessKeyId: window.localStorage.getItem("AK") ?? "",
-        secretAccessKey: window.localStorage.getItem("SK") ?? "",
+        accessKeyId: window.localStorage.getItem(LOCAL_STORAGE_AK_NAME) ?? "",
+        secretAccessKey:
+          window.localStorage.getItem(LOCAL_STORAGE_SK_NAME) ?? "",
       },
-      endpoint: window.localStorage.getItem("ENDPOINT") || undefined,
+      endpoint:
+        window.localStorage.getItem(LOCAL_STORAGE_ENDPOINT_NAME) || undefined,
     });
     bedrock.middlewareStack.add(
       (next) => (args) => {
-        const key = window.localStorage.getItem("BEDROCK_API_KEY");
+        const key = window.localStorage.getItem(
+          LOCAL_STORAGE_BEDROCK_API_KEY_NAME
+        );
         if (key) {
           (
             args.request as {

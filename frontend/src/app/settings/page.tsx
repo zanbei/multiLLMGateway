@@ -12,6 +12,12 @@ import {
   Popover,
   StatusIndicator,
 } from "@cloudscape-design/components";
+import {
+  LOCAL_STORAGE_AK_NAME,
+  LOCAL_STORAGE_BEDROCK_API_KEY_NAME,
+  LOCAL_STORAGE_ENDPOINT_NAME,
+  LOCAL_STORAGE_SK_NAME,
+} from "../consts";
 
 export default function Settings() {
   const [ak, setAk] = React.useState("");
@@ -20,10 +26,10 @@ export default function Settings() {
   const [apiKey, setApiKey] = React.useState("");
 
   React.useEffect(() => {
-    setAk(localStorage.getItem("AK") ?? "");
-    setSk(localStorage.getItem("SK") ?? "");
-    setEndpoint(localStorage.getItem("ENDPOINT") ?? "");
-    setApiKey(localStorage.getItem("BEDROCK_API_KEY") ?? "");
+    setAk(localStorage.getItem(LOCAL_STORAGE_AK_NAME) ?? "");
+    setSk(localStorage.getItem(LOCAL_STORAGE_SK_NAME) ?? "");
+    setEndpoint(localStorage.getItem(LOCAL_STORAGE_ENDPOINT_NAME) ?? "");
+    setApiKey(localStorage.getItem(LOCAL_STORAGE_BEDROCK_API_KEY_NAME) ?? "");
   }, []);
 
   return (
@@ -49,10 +55,16 @@ export default function Settings() {
               >
                 <Button
                   onClick={() => {
-                    window.localStorage.setItem("AK", ak);
-                    window.localStorage.setItem("SK", sk);
-                    window.localStorage.setItem("ENDPOINT", endpoint);
-                    window.localStorage.setItem("BEDROCK_API_KEY", apiKey);
+                    window.localStorage.setItem(LOCAL_STORAGE_AK_NAME, ak);
+                    window.localStorage.setItem(LOCAL_STORAGE_SK_NAME, sk);
+                    window.localStorage.setItem(
+                      LOCAL_STORAGE_ENDPOINT_NAME,
+                      endpoint
+                    );
+                    window.localStorage.setItem(
+                      LOCAL_STORAGE_BEDROCK_API_KEY_NAME,
+                      apiKey
+                    );
                   }}
                 >
                   Save
