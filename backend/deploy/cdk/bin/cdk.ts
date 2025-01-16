@@ -50,6 +50,10 @@ export class CdkStack extends cdk.Stack {
       engine: rds.DatabaseClusterEngine.AURORA_POSTGRESQL,
       vpc: vpc,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+      parameterGroup: rds.ParameterGroup.fromParameterGroupName(
+        this,
+        'ParameterGroup',
+        'default.aurora-postgresql15'),
       scaling: { autoPause: cdk.Duration.minutes(10) },
       defaultDatabaseName: 'litellm', 
     });
@@ -69,12 +73,14 @@ export class CdkStack extends cdk.Stack {
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'LitellmTask', {
       taskRole: ecsTaskExecutionRole,
       executionRole: ecsTaskExecutionRole,
+      cpu: 2048, // Increase to 2048 (2 vCPUs)
+      memoryLimitMiB: 4096, // Increase to 4096 (4 GB)阿·
     });
 
     taskDefinition.addContainer('LitellmContainer', {
       image: ecs.ContainerImage.fromEcrRepository(ecrRepo),
-      memoryLimitMiB: 4096,
-      cpu: 2048,
+      memoryLimitMiB: 2048,
+      cpu: 1024,
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'ecs',
         logGroup: new logs.LogGroup(this, '/ecs/litellm'),
