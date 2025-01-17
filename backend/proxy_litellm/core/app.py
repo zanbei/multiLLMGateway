@@ -1,18 +1,21 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from ..config.logging_config import setup_logging
-from ..config.app_config import load_config
 from ..api.routes import router
 from .handler import handler
+import logging
 
 # Set up logging
-logger = setup_logging()
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI application"""
     # Startup
-    load_config()
     yield
     # Shutdown
     await handler.close()

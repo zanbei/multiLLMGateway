@@ -1,0 +1,9 @@
+-i https://pypi.tuna.tsinghua.edu.cn/simple/
+boto3>=1.28.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+PyYAML>=6.0
+python-jose>=3.3.0
+python-multipart>=0.0.6

@@ -1,133 +1,83 @@
-# Bedrock to OpenAI Proxy
+# LiteLLM Proxy Service
 
-This is a reverse proxy that translates Amazon Bedrock Converse API requests to OpenAI chat completion API requests.
-
-## Setup
-
-1. Install dependencies:
-```bash
-pip install fastapi uvicorn python-dotenv openai
-```
-
-1. Configure your environment variables:
-- `OPENAI_API_BASE`: OpenAI API base URL (defaults to http://127.0.0.1:4000)
-
-## Running the Proxy
-
-Start the server:
-```bash
-python proxy.py
-```
-
-The proxy will run on http://localhost:8000
-
-## API Usage
-
-The proxy implements the Bedrock Converse API endpoint. You can make requests to:
-
-```
-POST /model/{model_id}/converse
-```
-
-Example request:
-```json
-{
-    "messages": [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "text": "Hello world"
-                }
-            ]
-        }
-    ],
-    "system": [
-        {
-            "text": "You are a helpful assistant"
-        }
-    ],
-    "inferenceConfig": {
-        "temperature": 0.7,
-        "maxTokens": 100,
-        "topP": 0.9,
-        "stopSequences": ["STOP"]
-    }
-}
-```
-
-Example response:
-```json
-{
-    "output": {
-        "message": {
-            "role": "assistant",
-            "content": [
-                {
-                    "text": "Hello! How can I help you today?"
-                }
-            ]
-        }
-    },
-    "usage": {
-        "inputTokens": 20,
-        "outputTokens": 8,
-        "totalTokens": 28
-    },
-    "metrics": {
-        "latencyMs": 500
-    },
-    "stopReason": "end_turn"
-}
-```
+A FastAPI-based proxy service that provides a unified interface for multiple Language Model providers (Bedrock, OpenAI, etc.). This service standardizes the API interface and handles request routing, authentication, and response processing.
 
 ## Features
 
-- Translates Bedrock request format to OpenAI format
-- Maps inference configuration parameters:
-  - maxTokens → max_tokens
-  - temperature → temperature
-  - topP → top_p
-  - stopSequences → stop
+- Unified API interface for multiple LLM providers
+- Support for AWS Bedrock and OpenAI
+- Request/Response handling and validation
+- Streaming support
+- Configurable logging
+- Multiple deployment options (Docker, CDK, Terraform)
 
-### Parameter Mapping Details
+## Project Structure
 
-#### Supported Parameters
-1. Messages:
-   - role (user/assistant/system) → maps directly
-   - content.text → maps to content string
+```
+backend/
+├── proxy_litellm/          # Main service implementation
+│   ├── api/               # API routes and handlers
+│   ├── core/             # Core application logic
+│   ├── models/           # Request/Response models
+│   └── utils/            # Utility functions
+├── deploy/               # Deployment configurations
+│   ├── cdk/             # AWS CDK deployment
+│   ├── docker/          # Docker deployment
+│   └── terraform/       # Terraform deployment
+└── logs/                # Application logs
+```
 
-2. System Messages:
-   - text → maps to system role message
+## Requirements
 
-3. Inference Configuration:
-   - maxTokens → max_tokens
-   - temperature → temperature
-   - topP → top_p
-   - stopSequences → stop
+- Python 3.8+
+- FastAPI
+- Uvicorn
+- boto3 (for AWS Bedrock)
+- Other dependencies listed in requirements.txt
 
-#### Unsupported Bedrock Parameters
-1. Request Parameters:
-   - guardrailConfig - No equivalent in OpenAI API
-   - performanceConfig - No equivalent in OpenAI API
-   - promptVariables - No equivalent in OpenAI API
-   - requestMetadata - No equivalent in OpenAI API
-   - toolConfig - Partially supported through functions in OpenAI API but requires custom mapping
+## Installation
 
-2. Response Parameters:
-   - trace - No equivalent in OpenAI API
-   - performanceConfig - No equivalent in OpenAI API
+1. Clone the repository
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-Note: Any unsupported parameters sent in the request will be ignored. If you need specific functionality from these parameters, you'll need to implement custom handling logic.
+## Usage
 
-Other Features:
-- Handles token usage metrics
-- Supports additional model request fields via additionalModelRequestFields
-- Error handling with appropriate status codes
-- Configurable API endpoint
+### Running Locally
 
-## Error Handling
+Start the server:
 
-The proxy returns appropriate HTTP status codes:
-- 400: Invalid request format
-- 500: Internal server error or OpenAI API error
+```bash
+python -m proxy_litellm
+```
+
+The server will start on `http://localhost:8000`
+
+### Docker Deployment
+
+Build and run using Docker:
+
+```bash
+cd deploy/docker
+docker build -t litellm-proxy .
+docker run -p 8000:8000 litellm-proxy
+```
+
+### AWS Deployment
+
+The service can be deployed to AWS using either CDK or Terraform. See the respective directories in `deploy/` for detailed instructions.
+
+## Configuration
+
+The service can be configured using environment variables or configuration files:
+
+- `log_conf.yaml`: Logging configuration
+
+
+## Logging
+
+Logs are written to both console and file:
+- Console: Debug level logging
+- File: Configurable via log_conf.yaml
