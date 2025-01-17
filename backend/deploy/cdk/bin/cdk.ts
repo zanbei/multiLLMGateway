@@ -29,6 +29,7 @@ export class LitellmStack extends cdk.Stack {
     
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow HTTP traffic');
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(4000), 'Allow HTTPS traffic');
+    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3306), 'Allow HTTPS traffic');
     const suffix = Math.random().toString(36).substring(2, 6);
 
     const ecrRepo = new ecr.Repository(this, 'MyECR', {
@@ -47,16 +48,28 @@ export class LitellmStack extends cdk.Stack {
     });
 
     // 创建 RDS Serverless 集群
-    const rdsCluster = new rds.ServerlessCluster(this, `litellm_${suffix}`, {
-      engine: rds.DatabaseClusterEngine.AURORA_POSTGRESQL,
+    // const rdsCluster = new rds.ServerlessCluster(this, `litellm_${suffix}`, {
+    //   engine: rds.DatabaseClusterEngine.auroraPostgres({ version: rds.AuroraPostgresEngineVersion.VER_15_2 }),
+    //   vpc: vpc,
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
+    //   parameterGroup: rds.ParameterGroup.fromParameterGroupName(
+    //     this,
+    //     'ParameterGroup',
+    //     'default.aurora-postgresql15'),
+    //   scaling: { autoPause: cdk.Duration.minutes(10) },
+    //   defaultDatabaseName: 'litellm', 
+    // });
+    const rdsCluster = new rds.ServerlessCluster(this, `litellm-${suffix}`, {
+      engine: rds.DatabaseClusterEngine.auroraPostgres({
+        version: rds.AuroraPostgresEngineVersion.VER_15_2 }),
       vpc: vpc,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      parameterGroup: rds.ParameterGroup.fromParameterGroupName(
-        this,
-        'ParameterGroup',
-        'default.aurora-postgresql15'),
-      scaling: { autoPause: cdk.Duration.minutes(10) },
-      defaultDatabaseName: 'litellm', 
+      scaling: {
+        autoPause: cdk.Duration.minutes(10), // Auto pause after 10 minutes of inactivity
+        minCapacity: rds.AuroraCapacityUnit.ACU_1, // Minimum capacity
+        maxCapacity: rds.AuroraCapacityUnit.ACU_4, // Maximum capacity
+      },
+      credentials: rds.Credentials.fromPassword('anbei', cdk.SecretValue.plainText('Qwer1234')),
+      defaultDatabaseName: 'litellm',  // Optional: specify a database name
     });
 
     const ecsTaskExecutionRole = new iam.Role(this, 'EcsTaskExecutionRole', {
