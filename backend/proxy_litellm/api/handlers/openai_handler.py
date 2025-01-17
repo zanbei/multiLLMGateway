@@ -1,10 +1,11 @@
 from typing import Dict, Any
 import json
+import os
 import time
 from fastapi.responses import StreamingResponse
 from .utils import BaseHandler
 
-OPENAI_API_URL = "http://127.0.0.1:4000/v1/chat/completions"
+OPENAI_API_URL = os.environ.get("OPENAI_API_URL", "http://127.0.0.1:4000/v1/chat/completions")
 
 class OpenAIHandler(BaseHandler):
     def _convert_bedrock_to_openai(self, bedrock_request: Dict[str, Any], model_id: str) -> Dict[str, Any]:
