@@ -7,6 +7,7 @@ import {
   FormField,
   PromptInput,
   Button,
+  Toggle,
 } from "@cloudscape-design/components";
 import { useState } from "react";
 import Messages from "./messages";
@@ -14,6 +15,7 @@ import { ScrollableContainer } from "./common";
 import { INITIAL_MESSAGES, Message } from "./config";
 import {
   BedrockRuntimeClient,
+  ConverseCommand,
   ConverseStreamCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import {
@@ -26,11 +28,12 @@ import {
 const modelId = "anthropic.claude-3-haiku-20240307-v1:0";
 
 export default function Chat() {
+  const [streaming, setStreaming] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [promptDisabled, setPromptDisabled] = useState(false);
   const [messages, setMessages] = useState([] as Message[]);
 
-  async function converse(messages: Message[]) {
+  function prepareBedrock(): BedrockRuntimeClient {
     const bedrock = new BedrockRuntimeClient({
       region: "us-east-1",
       credentials: {
@@ -57,6 +60,35 @@ export default function Chat() {
       },
       { step: "build" }
     );
+    return bedrock;
+  }
+
+  async function converse(messages: Message[]) {
+    const bedrock = prepareBedrock();
+
+    const response = await bedrock.send(
+      new ConverseCommand({
+        modelId,
+        messages: messages
+          .slice(0, -1)
+          .filter((m) => m.type == "chat-bubble")
+          .map((message) => ({
+            role: message.authorId == "user" ? "user" : "assistant",
+            content: [{ text: message.content!.toString() }],
+          })),
+      })
+    );
+
+    const text = response.output?.message?.content?.[0].text;
+    if (text) {
+      const ms = messages.slice();
+      ms.at(-1)!.content += text;
+      setMessages(ms);
+    }
+  }
+
+  async function converseStream(messages: Message[]) {
+    const bedrock = prepareBedrock();
 
     const response = await bedrock.send(
       new ConverseStreamCommand({
@@ -74,7 +106,7 @@ export default function Chat() {
     for await (const event of response.stream!) {
       const chunk = event.contentBlockDelta;
       if (chunk?.delta?.text) {
-        const message = chunk.delta.text.toString();
+        const message = chunk.delta.text;
         if (message) {
           const ms = messages.slice();
           ms.at(-1)!.content += message;
@@ -100,7 +132,7 @@ export default function Chat() {
       setPrompt("");
       setPromptDisabled(true);
 
-      converse(newMessages)
+      (streaming ? converseStream(newMessages) : converse(newMessages))
         .then(() => {
           setPromptDisabled(false);
           const ms = newMessages.slice();
@@ -134,6 +166,14 @@ export default function Chat() {
             header={
               <div style={{ display: "flex" }}>
                 <Header variant="h3">Generative AI chat</Header>
+                <div style={{ display: "flex", alignItems: "center" }}>
+                  <Toggle
+                    onChange={({ detail }) => setStreaming(detail.checked)}
+                    checked={streaming}
+                  >
+                    <span style={{ wordBreak: "keep-all" }}>Streaming</span>
+                  </Toggle>
+                </div>
                 <Button
                   ariaLabel="Load the example"
                   iconName="folder"
