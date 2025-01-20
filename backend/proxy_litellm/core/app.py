@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from ..api.routes import router
 from .handler import handler
 import logging
+from fastapi.middleware.cors import CORSMiddleware
 
 # Set up logging
 logging.basicConfig(
@@ -24,7 +25,12 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application"""
     # Initialize FastAPI app with lifespan handler
     app = FastAPI(lifespan=lifespan)
-
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  
+        allow_methods=["*"],     
+        allow_headers=["*"],     
+    )
     # Include API routes
     app.include_router(router)
 
