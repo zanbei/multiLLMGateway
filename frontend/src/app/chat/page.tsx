@@ -8,6 +8,7 @@ import {
   PromptInput,
   Button,
   Toggle,
+  Autosuggest,
 } from "@cloudscape-design/components";
 import { useState } from "react";
 import Messages from "./messages";
@@ -25,13 +26,14 @@ import {
   LOCAL_STORAGE_SK_NAME,
 } from "../consts";
 
-const modelId = "anthropic.claude-3-haiku-20240307-v1:0";
+const KNOWN_MODEL_IDS = ["anthropic.claude-3-haiku-20240307-v1:0"];
 
 export default function Chat() {
   const [streaming, setStreaming] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [promptDisabled, setPromptDisabled] = useState(false);
   const [messages, setMessages] = useState([] as Message[]);
+  const [modelId, setModelId] = useState(KNOWN_MODEL_IDS[0]);
 
   function prepareBedrock(): BedrockRuntimeClient {
     const bedrock = new BedrockRuntimeClient({
@@ -161,12 +163,24 @@ export default function Chat() {
         ]}
       />
       <ContentLayout>
-        <div style={{ height: "100%" }}>
+        <div style={{ height: "100%", alignItems: "center" }}>
           <Container
             header={
               <div style={{ display: "flex" }}>
                 <Header variant="h3">Generative AI chat</Header>
-                <div style={{ display: "flex", alignItems: "center" }}>
+                <Autosuggest
+                  onChange={({ detail }) => setModelId(detail.value)}
+                  value={modelId}
+                  options={KNOWN_MODEL_IDS.map((value) => ({ value }))}
+                  placeholder="Enter the model ID"
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    marginLeft: "10px",
+                  }}
+                >
                   <Toggle
                     onChange={({ detail }) => setStreaming(detail.checked)}
                     checked={streaming}
