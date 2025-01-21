@@ -9,7 +9,10 @@ import * as rds from 'aws-cdk-lib/aws-rds';
 import * as s3Deploy from 'aws-cdk-lib/aws-s3-deployment'; 
 import * as logs from 'aws-cdk-lib/aws-logs'; 
 import * as ec2 from 'aws-cdk-lib/aws-ec2'; 
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import { StackProps } from 'aws-cdk-lib'; 
+import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 
 const app = new cdk.App(); 
 
@@ -120,6 +123,61 @@ export class LitellmStack extends cdk.Stack {
       assignPublicIp: true,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       securityGroups: [securityGroup], 
+    });
+
+    const region = this.region;
+    const frontendFn = new lambda.Function(this, "frontend", {
+      runtime: lambda.Runtime.PROVIDED_AL2,
+      handler: "bootstrap",
+      memorySize: 2048,
+      code: lambda.Code.fromAsset("../../../frontend", {
+        bundling: {
+          image: lambda.Runtime.NODEJS_22_X.bundlingImage,
+          command: [
+            "bash",
+            "-c",
+            [
+              "npm install",
+              "npm run build",
+              "cp -au ./out/* /asset-output",
+              "cp misc/bootstrap /asset-output",
+              "cp misc/nginx.conf /asset-output",
+              "chmod +x /asset-output/bootstrap",
+            ].join(" && "),
+          ],
+          user: "root",
+        },
+      }),
+      environment: {
+        PORT: "8080",
+      },
+      layers: [
+        lambda.LayerVersion.fromLayerVersionArn(
+          this,
+          "LWALayer",
+          region == "cn-north-1"
+            ? "arn:aws-cn:lambda:cn-north-1:041581134020:layer:LambdaAdapterLayerX86:24"
+            : region == "cn-northwest-1"
+            ? "arn:aws-cn:lambda:cn-northwest-1:069767869989:layer:LambdaAdapterLayerX86:24"
+            : `arn:aws:lambda:${region}:753240598075:layer:LambdaAdapterLayerX86:24`
+        ),
+        new lambda.LayerVersion(this, "NginxLayer", {
+          code: lambda.Code.fromAsset("../../../frontend/misc/Nginx123X86.zip"),
+        }),
+      ],
+    });
+    const http = new apigw.HttpApi(this, "PortalApi");
+    http.addRoutes({
+      path: "/{proxy+}",
+      methods: [apigw.HttpMethod.GET],
+      integration: new HttpLambdaIntegration(
+        "frontendFnIntegration",
+        frontendFn
+      ),
+    });
+    new cdk.CfnOutput(this, "Web Portal URL", {
+      value: http.url!,
+      description: "Web portal url",
     });
   }
 }
