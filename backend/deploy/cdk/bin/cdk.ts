@@ -5,7 +5,7 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
-import * as rds from 'aws-cdk-lib/aws-rds';
+// import * as rds from 'aws-cdk-lib/aws-rds';
 import * as s3Deploy from 'aws-cdk-lib/aws-s3-deployment'; 
 import * as logs from 'aws-cdk-lib/aws-logs'; 
 import * as ec2 from 'aws-cdk-lib/aws-ec2'; 
@@ -13,6 +13,10 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import { StackProps } from 'aws-cdk-lib'; 
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import * as ecr_assets from 'aws-cdk-lib/aws-ecr-assets';
+import * as path from 'path';
+import { RemovalPolicy } from 'aws-cdk-lib';
+import * as ecrdeploy from 'cdk-ecr-deployment';
 
 const app = new cdk.App(); 
 
@@ -37,12 +41,25 @@ export class LitellmStack extends cdk.Stack {
 
     const ecrRepo = new ecr.Repository(this, 'MyECR', {
       repositoryName: `litellm-${suffix}`,
+      removalPolicy: RemovalPolicy.DESTROY, // 设置删除策略为 DESTROY
+      emptyOnDelete: true, // 可选：强制删除仓库时删除所有内容
     });
 
-    
-    
+    const dockerImage = new ecr_assets.DockerImageAsset(this, 'litellm', {
+      directory: path.join(__dirname, '../../docker'),
+    });
+
+    // 将镜像推送到指定的 ECR 仓库
+    new ecrdeploy.ECRDeployment(this, 'DeployDockerImage', {
+      src: new ecrdeploy.DockerImageName(dockerImage.imageUri),
+      dest: new ecrdeploy.DockerImageName(`${ecrRepo.repositoryUri}:latest`), // 使用指定的仓库 URI 和标签
+    });
+
+
     const configBucket = new s3.Bucket(this, 'ConfigBucket', {
       bucketName: `bedrock-china-${suffix}`,
+      removalPolicy: RemovalPolicy.DESTROY, // 设置删除策略为 DESTROY
+      autoDeleteObjects: true, // 可选：强制删除仓库时删除所有内容<end_of_file>
     });
 
     new s3Deploy.BucketDeployment(this, 'ConfigFile', {
@@ -62,18 +79,19 @@ export class LitellmStack extends cdk.Stack {
     //   scaling: { autoPause: cdk.Duration.minutes(10) },
     //   defaultDatabaseName: 'litellm', 
     // });
-    const rdsCluster = new rds.ServerlessCluster(this, `litellm-${suffix}`, {
-      engine: rds.DatabaseClusterEngine.auroraPostgres({
-        version: rds.AuroraPostgresEngineVersion.VER_15_2 }),
-      vpc: vpc,
-      scaling: {
-        autoPause: cdk.Duration.minutes(10), // Auto pause after 10 minutes of inactivity
-        minCapacity: rds.AuroraCapacityUnit.ACU_1, // Minimum capacity
-        maxCapacity: rds.AuroraCapacityUnit.ACU_4, // Maximum capacity
-      },
-      credentials: rds.Credentials.fromPassword('anbei', cdk.SecretValue.plainText('Qwer1234')),
-      defaultDatabaseName: 'litellm',  // Optional: specify a database name
-    });
+
+    // const rdsCluster = new rds.ServerlessCluster(this, `litellm-${suffix}`, {
+    //   engine: rds.DatabaseClusterEngine.auroraPostgres({
+    //     version: rds.AuroraPostgresEngineVersion.VER_15_2 }),
+    //   vpc: vpc,
+    //   scaling: {
+    //     autoPause: cdk.Duration.minutes(10), // Auto pause after 10 minutes of inactivity
+    //     minCapacity: rds.AuroraCapacityUnit.ACU_1, // Minimum capacity
+    //     maxCapacity: rds.AuroraCapacityUnit.ACU_4, // Maximum capacity
+    //   },
+    //   credentials: rds.Credentials.fromPassword('anbei', cdk.SecretValue.plainText('Qwer1234')),
+    //   defaultDatabaseName: 'litellm',  // Optional: specify a database name
+    // });
 
     const ecsTaskExecutionRole = new iam.Role(this, 'EcsTaskExecutionRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
@@ -91,7 +109,7 @@ export class LitellmStack extends cdk.Stack {
       taskRole: ecsTaskExecutionRole,
       executionRole: ecsTaskExecutionRole,
       cpu: 2048, // Increase to 2048 (2 vCPUs)
-      memoryLimitMiB: 4096, // Increase to 4096 (4 GB)阿·
+      memoryLimitMiB: 4096, // Increase to 4096 (4 GB)
     });
 
     taskDefinition.addContainer('LitellmContainer', {
