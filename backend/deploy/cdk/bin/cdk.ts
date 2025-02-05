@@ -143,7 +143,16 @@ export class LitellmStack extends cdk.Stack {
       securityGroups: [securityGroup], 
     });
 
-    const region = this.region;
+    const regionMapping = new cdk.CfnMapping(this, 'regionMapping', {
+      mapping: {
+        'cn-north-1': {
+          lwaLayerArn: 'arn:aws-cn:lambda:cn-north-1:041581134020:layer:LambdaAdapterLayerX86:24',
+        },
+        'cn-northwest-1': {
+          lwaLayerArn: 'arn:aws-cn:lambda:cn-northwest-1:069767869989:layer:LambdaAdapterLayerX86:24',
+        },
+      }
+    });
     const frontendFn = new lambda.Function(this, "frontend", {
       runtime: lambda.Runtime.PROVIDED_AL2,
       handler: "bootstrap",
@@ -173,11 +182,7 @@ export class LitellmStack extends cdk.Stack {
         lambda.LayerVersion.fromLayerVersionArn(
           this,
           "LWALayer",
-          region == "cn-north-1"
-            ? "arn:aws-cn:lambda:cn-north-1:041581134020:layer:LambdaAdapterLayerX86:24"
-            : region == "cn-northwest-1"
-            ? "arn:aws-cn:lambda:cn-northwest-1:069767869989:layer:LambdaAdapterLayerX86:24"
-            : `arn:aws:lambda:${region}:753240598075:layer:LambdaAdapterLayerX86:24`
+          regionMapping.findInMap(this.region, 'lwaLayerArn', `arn:aws:lambda:${this.region}:753240598075:layer:LambdaAdapterLayerX86:24`)
         ),
         new lambda.LayerVersion(this, "NginxLayer", {
           code: lambda.Code.fromAsset("../../../frontend/misc/Nginx123X86.zip"),
