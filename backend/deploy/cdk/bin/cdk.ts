@@ -18,6 +18,11 @@ import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations
 import { RemovalPolicy } from 'aws-cdk-lib';
 // import * as ecrdeploy from 'cdk-ecr-deployment';
 import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
+import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
+import { Duration } from 'aws-cdk-lib';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+const certificateArn = 'arn:aws-cn:acm:cn-northwest-1:969422986683:certificate/a02b38a3-0c3d-4b7b-a518-98cc2180b220';
 
 // 运行前export以下环境变量
 // export GLOBAL_AWS_SECRET_ACCESS_KEY='your_secret_access_key'
@@ -41,9 +46,9 @@ export class LitellmStack extends cdk.Stack {
     });
     
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow HTTP traffic');
-    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(4000), 'Allow HTTPS traffic');
-    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3306), 'Allow HTTPS traffic');
-    securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8000), 'Allow HTTPS traffic');
+    securityGroup.addIngressRule(securityGroup, ec2.Port.tcp(4000), 'Allow HTTPS traffic');
+    securityGroup.addIngressRule(securityGroup, ec2.Port.tcp(3306), 'Allow HTTPS traffic');
+    securityGroup.addIngressRule(securityGroup, ec2.Port.tcp(8000), 'Allow HTTPS traffic');
 
     // 创建公共 EC2 实例
 
@@ -59,11 +64,11 @@ export class LitellmStack extends cdk.Stack {
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, // 使用公共子网
       securityGroup,
-      keyName: 'nx2007' // 指定密钥对名称（不需要 .pem 后缀）
+      keyName: 'nx2007' // 密钥对名称（不需要 .pem 后缀）
     });
 
     // const suffix = Math.random().toString(36).substring(2, 6);
-    const suffix = 'ikvn'
+    const suffix = 'gz76'
 
     // china region 的 cdk-ecr-deployment 无法使用，原因是lambda无法下载public ecr
 
@@ -139,8 +144,8 @@ export class LitellmStack extends cdk.Stack {
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'LitellmTask', {
       taskRole: ecsTaskExecutionRole,
       executionRole: ecsTaskExecutionRole,
-      cpu: 2048, // Increase to 2048 (2 vCPUs)
-      memoryLimitMiB: 4096, // Increase to 4096 (4 GB)
+      cpu: 1024, 
+      memoryLimitMiB: 2048, 
     });
 
     taskDefinition.addContainer('LitellmContainer', {
@@ -194,8 +199,8 @@ export class LitellmStack extends cdk.Stack {
     const taskDefinitionProxy = new ecs.FargateTaskDefinition(this, 'ProxyTask', {
       taskRole: ecsTaskExecutionRole,
       executionRole: ecsTaskExecutionRole,
-      cpu: 2048, // Increase to 2048 (2 vCPUs)
-      memoryLimitMiB: 4096, // Increase to 4096 (4 GB)
+      cpu: 1024, 
+      memoryLimitMiB: 2048, 
     });
 
     taskDefinitionProxy.addContainer('ProxyContainer', {
@@ -208,28 +213,41 @@ export class LitellmStack extends cdk.Stack {
       }),
       environment: {
         AWS_REGION_NAME: 'us-west-2',
-        OPENAI_API_URL: "http://${recordName}:4000/v1/chat/completions", // service discovery
+        OPENAI_API_URL: `http://litellm.litellm.local:4000/v1/chat/completions`, // service discovery
         AWS_SECRET_ACCESS_KEY: process.env.GLOBAL_AWS_SECRET_ACCESS_KEY || '',
         AWS_ACCESS_KEY_ID: process.env.GLOBAL_AWS_ACCESS_KEY_ID || '',
       },
-      portMappings: [{ containerPort: 4000 }],
+      portMappings: [{ containerPort: 8000,
+        hostPort: 8000,
+        protocol: ecs.Protocol.TCP,}],
     });
 
-    const ProxyService = new ecs.FargateService(this, 'ProxyService', {
-      cluster: ecsCluster,
+    const loadBalancedFargateService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'ProxyService', {
+      cluster: ecsCluster, 
       taskDefinition: taskDefinitionProxy,
       desiredCount: 1,
+      publicLoadBalancer: true, 
+      securityGroups: [securityGroup],
+      taskSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       assignPublicIp: true,
-      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
-      securityGroups: [securityGroup], 
+      listenerPort: 443,
+      certificate: acm.Certificate.fromCertificateArn(this, 'proxy', certificateArn), 
+      protocol: elbv2.ApplicationProtocol.HTTPS,
       cloudMapOptions: {
         cloudMapNamespace: namespace,
         name: 'proxy', // 服务名称
       },
     });
+    // Configure the health check
+    
+    loadBalancedFargateService.targetGroup.configureHealthCheck({
+      interval: Duration.seconds(30),
+      healthyThresholdCount: 2, // Example: healthy after 2 consecutive successes
+      unhealthyThresholdCount: 2, // Example: unhealthy after 2 consecutive failures
+      timeout: Duration.seconds(4),  //Optional: time before the health check times out
+      healthyHttpCodes: "200-499", //暂时没有健康检查，返回404
+    });
 
-
-    const region = this.region;
     const regionMapping = new cdk.CfnMapping(this, 'regionMapping', {
       mapping: {
         'cn-north-1': {
@@ -292,5 +310,5 @@ export class LitellmStack extends cdk.Stack {
   }
 }
 
-new LitellmStack(app, 'BackLlm', {
+new LitellmStack(app, 'BackLlm1', {
 });

@@ -1,4 +1,4 @@
--i https://pypi.tuna.tsinghua.edu.cn/simple/
+# -i https://pypi.tuna.tsinghua.edu.cn/simple/
 
 PyYAML>=6.0
 aiohttp>=3.11.11
