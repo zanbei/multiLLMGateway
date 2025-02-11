@@ -42,3 +42,10 @@ class Handler:
 
 # Create single handler instance
 handler = Handler()
+
+# Convenience functions
+async def handle_converse(*args, **kwargs):
+    return await handler.handle_request(*args, **kwargs)
+
+async def handle_converse_stream(*args, **kwargs):
+    return await handler.handle_request(*args, stream=True, **kwargs)
