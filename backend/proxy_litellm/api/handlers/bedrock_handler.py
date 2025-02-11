@@ -43,6 +43,7 @@ class BedrockHandler(BaseHandler):
             self._handle_error(e, request_id)
 
     async def handle_stream(self, model_id: str, request: Dict[str, Any], api_key: str, request_id: str, start_time: float):
+        """Handle streaming conversation requests by passing through raw Bedrock response"""
         try:
             request_params = {"modelId": model_id, **request}
             self._log_request(request_id, request_params)
@@ -56,9 +57,8 @@ class BedrockHandler(BaseHandler):
             async def generate():
                 async for event in response['body']:
                     if event.get('chunk'):
-                        chunk_data = event['chunk']
-                        self.logger.debug(f"[{request_id}] Received chunk: {chunk_data}")
-                        yield f"data: {json.dumps(chunk_data)}\n\n"
+                        # Pass through the raw chunk data without any transformation
+                        yield f"data: {json.dumps(event['chunk'])}\n\n"
 
             return StreamingResponse(
                 generate(),

@@ -94,40 +94,57 @@ class OpenAIHandler(BaseHandler):
 
     def _convert_to_bedrock_stream_chunk(self, chunk: Dict[str, Any]) -> Dict[str, Any]:
         """Convert OpenAI stream chunk to Bedrock format"""
-        content = chunk["choices"][0]["delta"].get("content", "") if chunk["choices"] else ""
+        if not chunk.get("choices"):
+            return {}
 
-        return {
-            "output": {
-                "text": content
-            },
-            "stopReason": chunk["choices"][0].get("finish_reason", None) if chunk["choices"] else None,
-            "metrics": {
-                "latencyMs": 0  # Streaming chunks don't track individual latency
-            },
-            "usage": {
-                "inputTokens": chunk.get("usage", {}).get("prompt_tokens", 0),
-                "outputTokens": chunk.get("usage", {}).get("completion_tokens", 0),
-                "totalTokens": chunk.get("usage", {}).get("total_tokens", 0)
-            },
-            "performanceConfig": {
-                "latency": "low"  # Default value
-            },
-            "trace": {
-                "promptRouter": {
-                    "invokedModelId": chunk.get("model", "")
+        delta = chunk["choices"][0].get("delta", {})
+        content = delta.get("content", "")
+        finish_reason = chunk["choices"][0].get("finish_reason")
+        index = chunk["choices"][0].get("index", 0)
+
+        # If this is the first chunk with role, send messageStart and contentBlockStart
+        if delta.get("role"):
+            return {
+                "messageStart": {
+                    "role": delta["role"]
+                },
+                "contentBlockStart": {
+                    "contentBlockIndex": index,
+                    "start": {}
                 }
-            },
-            # Preserve original OpenAI fields that might be useful
-            "additionalModelResponseFields": {
-                "id": chunk.get("id"),
-                "created": chunk.get("created"),
-                "model": chunk.get("model"),
-                "object": chunk.get("object"),
-                # Preserve function/tool calls if present in delta
-                "function_call": chunk["choices"][0]["delta"].get("function_call") if chunk["choices"] else None,
-                "tool_calls": chunk["choices"][0]["delta"].get("tool_calls") if chunk["choices"] else None
             }
-        }
+
+        # If we have a finish reason, send contentBlockStop and messageStop
+        if finish_reason:
+            return {
+                "contentBlockStop": {
+                    "contentBlockIndex": index
+                },
+                "messageStop": {
+                    "stopReason": finish_reason,
+                    "metrics": {
+                        "latencyMs": 0
+                    },
+                    "usage": {
+                        "inputTokens": chunk.get("usage", {}).get("prompt_tokens", 0),
+                        "outputTokens": chunk.get("usage", {}).get("completion_tokens", 0),
+                        "totalTokens": chunk.get("usage", {}).get("total_tokens", 0)
+                    }
+                }
+            }
+
+        # For content, send contentBlockDelta
+        if content:
+            return {
+                "contentBlockDelta": {
+                    "contentBlockIndex": index,
+                    "delta": {
+                        "text": content
+                    }
+                }
+            }
+
+        return {}
 
     async def handle_converse(self, model_id: str, request: Dict[str, Any],
                             api_key: str, request_id: str, start_time: float):
@@ -135,10 +152,22 @@ class OpenAIHandler(BaseHandler):
         openai_request = self._convert_bedrock_to_openai(request, model_id)
         self._log_request(request_id, openai_request)
 
+        # Extract AWS access key from Credential header if it exists
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if "Authorization" in request:
+            credential = request["Authorization"]
+            try:
+                # Split by 'Credential=' and get the second part
+                credential_part = credential.split('Credential=')[1]
+                # Split by '/' and get the first part (access key)
+                headers["x-aws-accesskey"] = credential_part.split('/')[0]
+            except (IndexError, AttributeError):
+                pass
+
         session = await self.session
         async with session.post(
             OPENAI_API_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers=headers,
             json=openai_request
         ) as response:
             if response.status != 200:
@@ -156,11 +185,18 @@ class OpenAIHandler(BaseHandler):
         openai_request["stream"] = True
         self._log_request(request_id, openai_request)
 
+        # Extract AWS access key from Credential header if it exists
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if "Credential" in request:
+            credential = request["Credential"]
+            access_key = credential.split("/")[0].replace("Credential=", "")
+            headers["x-aws-accesskey"] = access_key
+
         async def generate():
             session = await self.session
             async with session.post(
                 OPENAI_API_URL,
-                headers={"Authorization": f"Bearer {api_key}"},
+                headers=headers,
                 json=openai_request
             ) as response:
                 if response.status != 200:
