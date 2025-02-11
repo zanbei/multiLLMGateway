@@ -5,7 +5,7 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
-// import * as rds from 'aws-cdk-lib/aws-rds';
+import * as rds from 'aws-cdk-lib/aws-rds';
 import * as s3Deploy from 'aws-cdk-lib/aws-s3-deployment'; 
 import * as logs from 'aws-cdk-lib/aws-logs'; 
 import * as ec2 from 'aws-cdk-lib/aws-ec2'; 
@@ -101,22 +101,26 @@ export class LitellmStack extends cdk.Stack {
       destinationBucket: configBucket,
     });
 
-    // const rdsCluster = new rds.ServerlessCluster(this, `litellm-${suffix}`, {
-    //   engine: rds.DatabaseClusterEngine.auroraPostgres({
-    //     version: rds.AuroraPostgresEngineVersion.VER_15_2 }),
-    //   vpc: vpc,
-    //   scaling: {
-    //     autoPause: cdk.Duration.minutes(10), // Auto pause after 10 minutes of inactivity
-    //     minCapacity: rds.AuroraCapacityUnit.ACU_1, // Minimum capacity
-    //     maxCapacity: rds.AuroraCapacityUnit.ACU_4, // Maximum capacity
-    //   },
-    //   credentials: rds.Credentials.fromPassword('anbei', cdk.SecretValue.plainText('Qwer1234')),
-    //   defaultDatabaseName: 'litellm',  // Optional: specify a database name
-    // });
+    // 创建 Aurora Serverless v2 数据库
+    const rdsCluster = new rds.DatabaseCluster(this, 'AuroraClusterV2', {
+      engine: rds.DatabaseClusterEngine.auroraPostgres({ version: rds.AuroraPostgresEngineVersion.VER_15_5 }),
+      credentials: { username: 'clusteradmin',password: cdk.SecretValue.plainText('Qwer1234') },
+      clusterIdentifier: `litellm-${suffix}`,
+      writer: rds.ClusterInstance.serverlessV2('writer'),
+      serverlessV2MinCapacity: 1,
+      serverlessV2MaxCapacity: 3,
+      vpc,
+      defaultDatabaseName: 'litellm',
+      enableDataApi: true, // 启用 Data API
+      enableClusterLevelEnhancedMonitoring: false, // 禁用集群级别的增强监控
+      enablePerformanceInsights: false, // 禁用性能洞察
+    });
+
 
     const ecsTaskExecutionRole = new iam.Role(this, 'EcsTaskExecutionRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
+
     // 创建 ECR 权限策略
     const ecrPolicy = new iam.Policy(this, 'EcrPolicy', {
       statements: [
@@ -139,6 +143,12 @@ export class LitellmStack extends cdk.Stack {
     const ecsCluster = new ecs.Cluster(this, 'LitellmCluster', {
       clusterName: `litellm_${suffix}`,
       vpc: vpc,
+    });
+
+    // 创建 Cloud Map 命名空间
+    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'MyNamespace', {
+      name: 'litellmdiscovery',
+      vpc,
     });
 
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'LitellmTask', {
@@ -165,18 +175,14 @@ export class LitellmStack extends cdk.Stack {
         LITELLM_CONFIG_BUCKET_NAME: configBucket.bucketName,
         LITELLM_LOG: 'DEBUG',
         DEEPSEEK_KEY: process.env.DEEPSEEK_KEY || '',
-        DATA_BASE_URL: '',
+        // DATA_BASE_URL: '',
       },
       portMappings: [{ containerPort: 4000 }],
     });
 
     
 
-    // 创建 Cloud Map 命名空间
-    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'MyNamespace', {
-      name: 'litellm.local',
-      vpc,
-    });
+
 
     const LitellmService = new ecs.FargateService(this, 'LitellmService', {
       cluster: ecsCluster,
@@ -213,7 +219,7 @@ export class LitellmStack extends cdk.Stack {
       }),
       environment: {
         AWS_REGION_NAME: 'us-west-2',
-        OPENAI_API_URL: `http://litellm.litellm.local:4000/v1/chat/completions`, // service discovery
+        OPENAI_API_URL: `http://litellm.litellmdiscovery:4000/v1/chat/completions`, // service discovery的路径
         AWS_SECRET_ACCESS_KEY: process.env.GLOBAL_AWS_SECRET_ACCESS_KEY || '',
         AWS_ACCESS_KEY_ID: process.env.GLOBAL_AWS_ACCESS_KEY_ID || '',
       },

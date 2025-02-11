@@ -27,7 +27,7 @@ def add_auth_header(model, params, request_signer, **kwargs):
 
 def get_bedrock_client():
     bedrock_client = boto3.client(service_name='bedrock-runtime',
-                                    endpoint_url='https://proxy.anbeisayyes.top/', config=config,region_name='cn-northwest-1')
+                                    endpoint_url='https://proxy1.anbeisayyes.top/', config=config,region_name='cn-northwest-1')
     event_system = bedrock_client.meta.events
     event_system.register('before-call.*', add_auth_header)
     return bedrock_client
@@ -56,7 +56,7 @@ def generate_conversation(bedrock_client,
     # top_k = 200
 
     # Base inference parameters to use.
-    inference_config = {"temperature": temperature}
+    inference_config = {"temperature": temperature,"maxTokens": 20}
     # Additional inference parameters to use.
     # additional_model_fields = {"top_k": top_k}
 
@@ -85,7 +85,7 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s: %(message)s")
 
-    model_id = "deepseek-chat"
+    model_id = "bedrock-nova-v1"
 
     # Setup the system prompts and messages to send to the model.
     system_prompts = [{"text": "You are an app that creates playlists for a radio station that plays rock and pop music."
@@ -94,10 +94,7 @@ def main():
         "role": "user",
         "content": [{"text": "Create a list of 3 pop songs."}]
     }
-    message_2 = {
-        "role": "user",
-        "content": [{"text": "Make sure the songs are by artists from the United Kingdom."}]
-    }
+
     messages = []
 
     try:
@@ -113,13 +110,7 @@ def main():
         output_message = response['output']['message']
         messages.append(output_message)
 
-        # Continue the conversation with the 2nd message.
-        messages.append(message_2)
-        response = generate_conversation(
-            bedrock_client, model_id, system_prompts, messages)
-
-        output_message = response['output']['message']
-        messages.append(output_message)
+        
 
         # Show the complete conversation.
         for message in messages:
