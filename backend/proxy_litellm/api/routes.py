@@ -19,17 +19,19 @@ async def health_check():
 async def converse(
     model_id: str,
     request: ConverseRequest,
-    api_key: Annotated[str, Depends(get_api_key)]
+    api_key: Annotated[str, Depends(get_api_key)],
+    raw_request: Request
 ):
-    return await handler.handle_request(model_id, request.dict(), api_key)
+    return await handler.handle_request(model_id, request.dict(), api_key, raw_request=raw_request)
 
 @router.post("/model/{model_id}/converse-stream")
 async def converse_stream(
     model_id: str,
     request: ConverseRequest,
-    api_key: Annotated[str, Depends(get_api_key)]
+    api_key: Annotated[str, Depends(get_api_key)],
+    raw_request: Request
 ):
-    return await handler.handle_request(model_id, request.dict(), api_key, stream=True)
+    return await handler.handle_request(model_id, request.dict(), api_key, stream=True, raw_request=raw_request)
 
 @router.post("/register")
 async def register(request: Request):

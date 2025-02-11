@@ -17,17 +17,18 @@ config = Config(
    }
 )
 
-BEDROCK_API_KEY="sk-7654"
+LITELLM_API_KEY="sk-7654"
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 def add_auth_header(model, params, request_signer, **kwargs):
-    params['headers']['x-bedrock-api-key'] = BEDROCK_API_KEY
+    params['headers']['x-bedrock-api-key'] = "Bearer " + LITELLM_API_KEY
 
 def get_bedrock_client():
     bedrock_client = boto3.client(service_name='bedrock-runtime',
-                                    endpoint_url='https://proxy.anbeisayyes.top/', config=config,region_name='cn-northwest-1')
+                                  endpoint_url='http://127.0.0.1:8000',
+                                  config=config)
     event_system = bedrock_client.meta.events
     event_system.register('before-call.*', add_auth_header)
     return bedrock_client
@@ -85,8 +86,8 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s: %(message)s")
 
-    model_id = "deepseek-chat"
-
+    model_id = "litellm-anthropic.claude-3-5-sonnet-20241022-v2:0"
+    # model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
     # Setup the system prompts and messages to send to the model.
     system_prompts = [{"text": "You are an app that creates playlists for a radio station that plays rock and pop music."
                        "Only return song names and the artist."}]

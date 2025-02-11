@@ -1,68 +1,177 @@
 from fastapi.responses import StreamingResponse
 from typing import Dict, Any
-import json
-from botocore.exceptions import ClientError, BotoCoreError
+import os
+import asyncio
+import urllib.parse
+from fastapi import Request
+import logging
 
-from ...utils.bedrock import get_bedrock_client
 from .utils import BaseHandler
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class BedrockHandler(BaseHandler):
     def __init__(self):
         super().__init__()
-        self.bedrock_client = get_bedrock_client()
+        self.litellm_endpoint = os.environ.get("LITELLM_ENDPOINT")
+        if not self.litellm_endpoint:
+            raise ValueError("LITELLM_ENDPOINT environment variable is required")
 
-    def _handle_error(self, error: Exception, request_id: str):
-        """Handle AWS-specific errors"""
-        error_message = str(error)
+        # Parse endpoint URL (assuming HTTP)
+        url = urllib.parse.urlparse(self.litellm_endpoint)
+        self.proxy_host = url.hostname
+        self.proxy_port = url.port or 80
 
-        if isinstance(error, ClientError):
-            error_code = error.response['Error']['Code']
-            error_message = error.response['Error']['Message']
-            self.logger.error(f"[{request_id}] AWS ClientError: {error_code} - {error_message}")
-            raise ValueError(error_message)
+    async def _forward_raw(self, request: Request, path: str):
+        """Forward raw request through socket"""
+        reader, writer = await asyncio.open_connection(self.proxy_host, self.proxy_port)
 
-        elif isinstance(error, BotoCoreError):
-            self.logger.error(f"[{request_id}] AWS BotoCoreError: {error_message}")
-            raise ValueError(error_message)
-
-        # Call base handler for other errors
-        super()._handle_error(error, request_id)
-
-    async def handle_converse(self, model_id: str, request: Dict[str, Any], api_key: str, request_id: str, start_time: float):
         try:
-            request_params = {"modelId": model_id, **request}
-            self._log_request(request_id, request_params)
+            body = await request.body()
+            body_len = len(body) if body else 0
 
-            response = await self._execute_with_timeout(
-                self.bedrock_client.converse(**request_params),
-                request_id
-            )
-            self._log_success(request_id, start_time)
-            return response
+            # Forward request line with encoded path
+            request_line = f"{request.method} {path} HTTP/1.1\r\n"
+            logger.debug(f"Request line: {request_line.strip()}")
+
+            # Get headers
+            headers = dict(request.headers)
+            headers["host"] = f"{self.proxy_host}:{self.proxy_port}"
+
+            # Log headers
+            logger.debug("Request headers:")
+            for k, v in headers.items():
+                logger.debug(f"{k}: {v}")
+
+            # Forward request line
+            writer.write(request_line.encode())
+
+            # Forward headers
+            for k, v in headers.items():
+                writer.write(f"{k}: {v}\r\n".encode())
+            writer.write(b"\r\n")
+
+            # Forward body
+            if body:
+                logger.debug(f"Request body ({body_len} bytes): {body.decode()}")
+                writer.write(body)
+            await writer.drain()
+
+            return reader, writer
         except Exception as e:
-            self._handle_error(e, request_id)
+            logger.error(f"Error forwarding request: {str(e)}")
+            writer.close()
+            await writer.wait_closed()
+            raise e
 
-    async def handle_stream(self, model_id: str, request: Dict[str, Any], api_key: str, request_id: str, start_time: float):
-        """Handle streaming conversation requests by passing through raw Bedrock response"""
+    def _encode_path(self, base_path: str, model_id: str) -> str:
+        """Encode path components properly"""
+        # URL encode model ID
+        encoded_model = urllib.parse.quote(model_id, safe='')
+        # Construct and encode full path
+        path = f"{base_path}/{encoded_model}/converse"
+        return path
+
+    async def handle_converse(self, model_id: str, request: Dict[str, Any], api_key: str, request_id: str, start_time: float, raw_request: Request):
+        """Forward non-streaming request through proxy"""
+        path = self._encode_path("/bedrock/model", model_id)
+        logger.debug(f"[{request_id}] Forwarding request to: {path}")
+
+        reader, writer = await self._forward_raw(raw_request, path)
+
         try:
-            request_params = {"modelId": model_id, **request}
-            self._log_request(request_id, request_params)
+            # Read response status line
+            status_line = await reader.readline()
+            status_text = status_line.decode().strip()
+            logger.debug(f"[{request_id}] Response status line: {status_text}")
+            status = int(status_line.split()[1])
 
-            response = await self._execute_with_timeout(
-                self.bedrock_client.converse_stream(**request_params),
-                request_id
+            # Read response headers
+            headers = {}
+            logger.debug(f"[{request_id}] Response headers:")
+            while True:
+                line = await reader.readline()
+                if line == b"\r\n":
+                    break
+                if line:
+                    header_line = line.decode().strip()
+                    logger.debug(f"Header: {header_line}")
+                    name, value = header_line.split(": ", 1)
+                    headers[name] = value
+
+            # Read response body
+            body = await reader.read()
+            body_text = body.decode()
+            logger.debug(f"[{request_id}] Response body: {body_text}")
+
+            return StreamingResponse(
+                [body],
+                status_code=status,
+                headers=headers
             )
-            self._log_success(request_id, start_time)
+        except Exception as e:
+            logger.error(f"[{request_id}] Error handling response: {str(e)}")
+            raise
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    async def handle_stream(self, model_id: str, request: Dict[str, Any], api_key: str, request_id: str, start_time: float, raw_request: Request):
+        """Forward streaming request through proxy"""
+        path = self._encode_path("/bedrock/model", model_id)
+        path = path.replace("/converse", "/converse-stream")
+        logger.debug(f"[{request_id}] Forwarding streaming request to: {path}")
+
+        reader, writer = await self._forward_raw(raw_request, path)
+
+        try:
+            # Read response status line
+            status_line = await reader.readline()
+            status_text = status_line.decode().strip()
+            logger.debug(f"[{request_id}] Response status line: {status_text}")
+            status = int(status_line.split()[1])
+
+            # Read response headers
+            response_headers = {}
+            logger.debug(f"[{request_id}] Response headers:")
+            while True:
+                line = await reader.readline()
+                if line == b"\r\n":
+                    break
+                if line:
+                    header_line = line.decode().strip()
+                    logger.debug(f"Header: {header_line}")
+                    name, value = header_line.split(": ", 1)
+                    response_headers[name] = value
+
+            if status >= 400:
+                error_body = await reader.read()
+                error_text = error_body.decode()
+                logger.error(f"[{request_id}] Error response: {error_text}")
+                writer.close()
+                await writer.wait_closed()
+                raise ValueError(f"Proxy returned error status: {status}")
 
             async def generate():
-                async for event in response['body']:
-                    if event.get('chunk'):
-                        # Pass through the raw chunk data without any transformation
-                        yield f"data: {json.dumps(event['chunk'])}\n\n"
+                try:
+                    chunk_count = 0
+                    while True:
+                        chunk = await reader.read(8192)
+                        if not chunk:
+                            break
+                        chunk_count += 1
+                        logger.debug(f"[{request_id}] Forwarding chunk {chunk_count}, size: {len(chunk)}")
+                        yield chunk
+                finally:
+                    logger.debug(f"[{request_id}] Stream complete after {chunk_count} chunks")
+                    writer.close()
+                    await writer.wait_closed()
 
             return StreamingResponse(
                 generate(),
-                media_type="text/event-stream"
+                headers=response_headers
             )
         except Exception as e:
-            self._handle_error(e, request_id)
+            logger.error(f"[{request_id}] Error handling streaming response: {str(e)}")
+            raise
