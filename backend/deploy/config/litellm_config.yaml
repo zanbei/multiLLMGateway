@@ -21,7 +21,9 @@ model_list:
 
 # general_settings:    
 #     alerting: ["slack"]
-# general_settings: 
-#   database_url: os.environ/DATA_BASE_URL
-#   allow_requests_on_db_unavailable: true
-  # master_key: sk-7654 
+general_settings: 
+  database_url: os.environ/DATA_BASE_URL
+  allow_requests_on_db_unavailable: true
+  background_health_checks: True # enable background health checks
+  health_check_interval: 300 # frequency of background health checks
+  master_key: sk-7654 
