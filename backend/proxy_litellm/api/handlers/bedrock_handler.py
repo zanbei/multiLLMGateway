@@ -155,14 +155,36 @@ class BedrockHandler(BaseHandler):
 
             async def generate():
                 try:
+                    # Read the response in binary mode without decoding
+                    # This preserves the AWS event stream format and checksums
+                    buffer = bytearray()
                     chunk_count = 0
                     while True:
-                        chunk = await reader.read(8192)
+                        # Read a smaller chunk to avoid buffering too much
+                        chunk = await reader.read(4096)
                         if not chunk:
                             break
+
+                        buffer.extend(chunk)
                         chunk_count += 1
-                        logger.debug(f"[{request_id}] Forwarding chunk {chunk_count}, size: {len(chunk)}")
-                        yield chunk
+
+                        # Forward complete event stream messages
+                        # This ensures we don't split messages in the middle
+                        while len(buffer) >= 12:  # Minimum size for prelude
+                            # Parse prelude to get message size
+                            total_length = int.from_bytes(buffer[0:4], byteorder='big')
+
+                            # Wait for complete message
+                            if len(buffer) < total_length:
+                                break
+
+                            # Extract and forward complete message
+                            message = buffer[:total_length]
+                            buffer = buffer[total_length:]
+
+                            logger.debug(f"[{request_id}] Forwarding message {chunk_count}, size: {len(message)}")
+                            yield bytes(message)
+
                 finally:
                     logger.debug(f"[{request_id}] Stream complete after {chunk_count} chunks")
                     writer.close()
