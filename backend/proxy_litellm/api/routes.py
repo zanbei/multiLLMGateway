@@ -38,17 +38,22 @@ async def register(request: Request):
     """Register endpoint that generates a key based on AWS credentials."""
     # Get the Credential header
     credential = request.headers.get("Authorization")
-    if not credential:
-        raise HTTPException(status_code=400, detail="Authorization header is required")
-
-    # Extract AWS access key from credential header
-    try:
-        # Split by 'Credential=' and get the second part
-        credential_part = credential.split('Credential=')[1]
-        # Split by '/' and get the first part (access key)
-        aws_access_key = credential_part.split('/')[0]
-    except (IndexError, AttributeError):
-        raise HTTPException(status_code=400, detail="Invalid credential format")
+    if credential:
+        # Extract AWS access key from credential header
+        try:
+            # Split by 'Credential=' and get the second part
+            credential_part = credential.split('Credential=')[1]
+            # Split by '/' and get the first part (access key)
+            aws_access_key = credential_part.split('/')[0]
+        except (IndexError, AttributeError):
+            raise HTTPException(status_code=400, detail="Invalid credential format")
+    else:
+        # Fetch accesskey from body
+        try:
+            body = await request.json()
+            aws_access_key = body.get('accesskey')
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid credential format")
 
     # Get litellm configuration from environment
     litellm_endpoint = os.getenv("LITELLM_ENDPOINT")
@@ -70,9 +75,7 @@ async def register(request: Request):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "metadata": {
-                        "aws-accesskey": aws_access_key
-                    }
+                    "user_id": aws_access_key
                 }
             )
             response.raise_for_status()
