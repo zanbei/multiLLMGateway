@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
 def add_auth_header(model, params, request_signer, **kwargs):
-    params['headers']['x-bedrock-api-key'] = "Bearer " + LITELLM_API_KEY
+    params['headers']['x-bedrock-api-key'] = LITELLM_API_KEY
 
 def get_bedrock_client():
     bedrock_client = boto3.client(service_name='bedrock-runtime',

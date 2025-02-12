@@ -101,7 +101,7 @@ Send a chat completion request to a specific model. See https://docs.aws.amazon.
 You need to add your API Key in the following format in header:
 
 ```
-x-bedrock-api-key=Bearer <Your API Key>
+x-bedrock-api-key=<Your API Key>
 ```
 
 ### Streaming Chat Completion
@@ -113,7 +113,7 @@ Send a streaming chat completion request to a specific model. See https://docs.a
 You need to add your API Key in the following format in header:
 
 ```
-x-bedrock-api-key=Bearer <Your API Key>
+x-bedrock-api-key=<Your API Key>
 ```
 
 ### Register for API Key

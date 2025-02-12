@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 def add_auth_header(model, params, request_signer, **kwargs):
-    params['headers']['x-bedrock-api-key'] = "Bearer " + LITELLM_API_KEY
+    params['headers']['x-bedrock-api-key'] = LITELLM_API_KEY
 
 def get_bedrock_client():
     bedrock_client = boto3.client(service_name='bedrock-runtime',
@@ -99,7 +99,8 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s: %(message)s")
 
-    model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    # model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model_id = "litellm-anthropic.claude-3-5-sonnet-20241022-v2:0"
     system_prompt = """You are an app that creates playlists for a radio station
       that plays rock and pop music. Only return song names and the artist."""
 

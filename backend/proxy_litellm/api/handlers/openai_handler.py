@@ -1,8 +1,9 @@
-from typing import Dict, Any, Optional, AsyncGenerator, Union
+from typing import Dict, Any, Optional, AsyncGenerator, Union, Tuple
 import json
 import os
 import time
 import logging
+from binascii import crc32
 from fastapi.responses import StreamingResponse
 from fastapi import Request, HTTPException
 from .utils import BaseHandler
@@ -11,6 +12,56 @@ OPENAI_API_URL = os.environ.get("OPENAI_API_URL", "http://127.0.0.1:4000/v1/chat
 logger = logging.getLogger(__name__)
 
 class OpenAIHandler(BaseHandler):
+    @staticmethod
+    def _calculate_crc32(data: bytes, crc: int = 0) -> int:
+        """Calculate CRC32 checksum for data.
+
+        Args:
+            data: Bytes to calculate checksum for
+            crc: Initial CRC value (default 0)
+
+        Returns:
+            Calculated CRC32 checksum
+        """
+        return crc32(data, crc) & 0xFFFFFFFF
+
+    def _create_event_message(self, headers: Dict[str, str], payload: Dict[str, Any]) -> bytes:
+        """Create an event message with proper checksums.
+
+        Args:
+            headers: Event headers
+            payload: Event payload
+
+        Returns:
+            Bytes containing the complete event message
+        """
+        # Convert headers and payload to JSON bytes
+        headers_bytes = json.dumps(headers).encode()
+        payload_bytes = json.dumps(payload).encode()
+
+        # Calculate lengths
+        headers_length = len(headers_bytes)
+        total_length = (
+            12 +  # Prelude length (total_length + headers_length + prelude_crc)
+            headers_length +
+            len(payload_bytes) +
+            4  # Message CRC
+        )
+
+        # Create prelude
+        prelude = (
+            total_length.to_bytes(4, byteorder='big') +
+            headers_length.to_bytes(4, byteorder='big')
+        )
+        prelude_crc = self._calculate_crc32(prelude)
+        prelude_with_crc = prelude + prelude_crc.to_bytes(4, byteorder='big')
+
+        # Calculate message CRC
+        message_crc = self._calculate_crc32(headers_bytes + payload_bytes, crc=prelude_crc)
+
+        # Combine all parts
+        return prelude_with_crc + headers_bytes + payload_bytes + message_crc.to_bytes(4, byteorder='big')
+
     def _convert_bedrock_to_openai(self, bedrock_request: Dict[str, Any], model_id: str) -> Dict[str, Any]:
         """Convert Bedrock request format to OpenAI format
 
@@ -254,17 +305,31 @@ class OpenAIHandler(BaseHandler):
         elapsed = time.time() - start_time
         logger.info(f"Request {request_id}: Completed successfully in {elapsed:.2f}s")
 
+    def _prepare_headers(self, api_key: str, request: Dict[str, Any]) -> Dict[str, str]:
+        """Prepare headers for the request
+
+        Args:
+            api_key: The API key to use
+            request: The request that may contain AWS credentials
+
+        Returns:
+            Dict containing the prepared headers
+        """
+        if api_key.startswith("Bearer "):
+            api_key = api_key[7:]
+        headers = {"Authorization": "Bearer" + api_key}
+        aws_access_key = self._extract_aws_access_key(request)
+        if aws_access_key:
+            headers["x-aws-accesskey"] = aws_access_key
+        return headers
+
     async def handle_converse(self, model_id: str, request: Dict[str, Any],
                             api_key: str, request_id: str, start_time: float, raw_request: Request):
         """Handle non-streaming conversation requests"""
         openai_request = self._convert_bedrock_to_openai(request, model_id)
         self._log_request(request_id, openai_request)
 
-        # Setup headers with API key and optional AWS access key
-        headers = {"x-bedrock-api-key": api_key}
-        aws_access_key = self._extract_aws_access_key(request)
-        if aws_access_key:
-            headers["x-aws-accesskey"] = aws_access_key
+        headers = self._prepare_headers(api_key, request)
 
         try:
             session = await self.session
@@ -285,17 +350,13 @@ class OpenAIHandler(BaseHandler):
             self._handle_error(e, request_id)
 
     async def handle_stream(self, model_id: str, request: Dict[str, Any],
-                          api_key: str, request_id: str, start_time: float):
+                          api_key: str, request_id: str, start_time: float, raw_request: Request):
         """Handle streaming conversation requests"""
         openai_request = self._convert_bedrock_to_openai(request, model_id)
         openai_request["stream"] = True
         self._log_request(request_id, openai_request)
 
-        # Setup headers with API key and optional AWS access key
-        headers = {"x-bedrock-api-key": api_key}
-        aws_access_key = self._extract_aws_access_key(request)
-        if aws_access_key:
-            headers["x-aws-accesskey"] = aws_access_key
+        headers = self._prepare_headers(api_key, request)
 
         async def generate():
             try:
@@ -329,7 +390,7 @@ class OpenAIHandler(BaseHandler):
 
                                 for chunk in chunks_to_process:
                                     # Create event headers
-                                    headers = {
+                                    event_headers = {
                                         ":event-type": (
                                             "messageStart" if "role" in chunk
                                             else "contentBlockStop" if "contentBlockIndex" in chunk and "delta" not in chunk
@@ -340,8 +401,10 @@ class OpenAIHandler(BaseHandler):
                                         ":content-type": "application/json",
                                         ":message-type": "event"
                                     }
-                                    # Send headers and body as separate lines
-                                    yield f"{json.dumps(headers)}\n{json.dumps(chunk)}\n\n"
+
+                                    # Create event message with checksums
+                                    event_message = self._create_event_message(event_headers, chunk)
+                                    yield event_message
 
                             except json.JSONDecodeError as e:
                                 logger.warning(f"Failed to decode JSON chunk in stream: {e}")
@@ -356,6 +419,7 @@ class OpenAIHandler(BaseHandler):
             headers={
                 "Transfer-Encoding": "chunked",
                 "Connection": "keep-alive",
-                "x-amzn-RequestId": request_id
+                "x-amzn-RequestId": request_id,
+                "Content-Type": "application/vnd.amazon.eventstream"  # Ensure proper content type
             }
         )
