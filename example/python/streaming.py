@@ -100,7 +100,7 @@ def main():
                         format="%(levelname)s: %(message)s")
 
     # model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
-    model_id = "litellm-anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model_id = "litellm-anthropic.claude-3-5-haiku-20241022-v1:0"
     system_prompt = """You are an app that creates playlists for a radio station
       that plays rock and pop music. Only return song names and the artist."""
 

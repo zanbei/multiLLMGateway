@@ -3,64 +3,29 @@ import json
 import os
 import time
 import logging
-from binascii import crc32
 from fastapi.responses import StreamingResponse
 from fastapi import Request, HTTPException
 from .utils import BaseHandler
+from proxy_litellm.utils.eventstream import EventStreamMessageEncoder
 
 OPENAI_API_URL = os.environ.get("OPENAI_API_URL", "http://127.0.0.1:4000/v1/chat/completions")
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class OpenAIHandler(BaseHandler):
-    @staticmethod
-    def _calculate_crc32(data: bytes, crc: int = 0) -> int:
-        """Calculate CRC32 checksum for data.
-
-        Args:
-            data: Bytes to calculate checksum for
-            crc: Initial CRC value (default 0)
-
-        Returns:
-            Calculated CRC32 checksum
-        """
-        return crc32(data, crc) & 0xFFFFFFFF
-
-    def _create_event_message(self, headers: Dict[str, str], payload: Dict[str, Any]) -> bytes:
-        """Create an event message with proper checksums.
+    def _create_event_message(self, headers: Dict[str, str], payload: Dict[str, Any], request_id: str) -> bytes:
+        """Create an event message with proper checksums using AWS event stream wire format.
 
         Args:
             headers: Event headers
             payload: Event payload
+            request_id: Request ID for logging
 
         Returns:
             Bytes containing the complete event message
         """
-        # Convert headers and payload to JSON bytes
-        headers_bytes = json.dumps(headers).encode()
-        payload_bytes = json.dumps(payload).encode()
-
-        # Calculate lengths
-        headers_length = len(headers_bytes)
-        total_length = (
-            12 +  # Prelude length (total_length + headers_length + prelude_crc)
-            headers_length +
-            len(payload_bytes) +
-            4  # Message CRC
-        )
-
-        # Create prelude
-        prelude = (
-            total_length.to_bytes(4, byteorder='big') +
-            headers_length.to_bytes(4, byteorder='big')
-        )
-        prelude_crc = self._calculate_crc32(prelude)
-        prelude_with_crc = prelude + prelude_crc.to_bytes(4, byteorder='big')
-
-        # Calculate message CRC
-        message_crc = self._calculate_crc32(headers_bytes + payload_bytes, crc=prelude_crc)
-
-        # Combine all parts
-        return prelude_with_crc + headers_bytes + payload_bytes + message_crc.to_bytes(4, byteorder='big')
+        logger.debug(f"[{request_id}] Creating event message with headers: {headers}, payload: {payload}")
+        return EventStreamMessageEncoder.encode(headers, payload)
 
     def _convert_bedrock_to_openai(self, bedrock_request: Dict[str, Any], model_id: str) -> Dict[str, Any]:
         """Convert Bedrock request format to OpenAI format
@@ -317,7 +282,7 @@ class OpenAIHandler(BaseHandler):
         """
         if api_key.startswith("Bearer "):
             api_key = api_key[7:]
-        headers = {"Authorization": "Bearer" + api_key}
+        headers = {"Authorization": "Bearer " + api_key}
         aws_access_key = self._extract_aws_access_key(request)
         if aws_access_key:
             headers["x-aws-accesskey"] = aws_access_key
@@ -403,7 +368,7 @@ class OpenAIHandler(BaseHandler):
                                     }
 
                                     # Create event message with checksums
-                                    event_message = self._create_event_message(event_headers, chunk)
+                                    event_message = self._create_event_message(event_headers, chunk, request_id)
                                     yield event_message
 
                             except json.JSONDecodeError as e:
