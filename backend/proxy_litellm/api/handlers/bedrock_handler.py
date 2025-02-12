@@ -35,8 +35,19 @@ class BedrockHandler(BaseHandler):
             request_line = f"{request.method} {path} HTTP/1.1\r\n"
             logger.debug(f"Request line: {request_line.strip()}")
 
-            # Get headers
+            # Get and modify headers
             headers = dict(request.headers)
+
+            # Remove specified headers
+            headers.pop('Authorization', None)  # Remove if exists
+            headers.pop('X-Amz-Security-Token', None)
+            headers.pop('X-Amz-Date', None)
+
+            # Move x-bedrock-api-key to Authorization
+            if 'x-bedrock-api-key' in headers:
+                headers['Authorization'] = "Bearer " + headers.pop('x-bedrock-api-key')
+
+            # Set host header
             headers["host"] = f"{self.proxy_host}:{self.proxy_port}"
 
             # Log headers
