@@ -259,7 +259,7 @@ export class LitellmStack extends cdk.Stack {
         AWS_SECRET_ACCESS_KEY: process.env.GLOBAL_AWS_SECRET_ACCESS_KEY || '',
         AWS_ACCESS_KEY_ID: process.env.GLOBAL_AWS_ACCESS_KEY_ID || '',
         LITELLM_MASTER_KEY: 'sk-7654',
-        LITELLM_ENDPOINT: `https//litellm.litellm_${suffix}:4000`,
+        LITELLM_ENDPOINT: `http://litellm.litellm_${suffix}:4000`,
       },
       portMappings: [{ containerPort: 8000,
         hostPort: 8000,
