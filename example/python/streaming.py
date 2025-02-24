@@ -7,15 +7,32 @@ Shows how to use the <noloc>Converse</noloc> API to stream a response from Anthr
 import logging
 import boto3
 
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
-BEDROCK_API_KEY="sk-7654"
+config = Config(
+   retries = {
+      'max_attempts': 1,
+      'mode': 'adaptive'
+   }
+)
+boto3.set_stream_logger('')
+
+LITELLM_API_KEY="sk-7654"
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-def add_auth_header(request, **kwargs):
-    request.headers.add_header('x-bedrock-api-key', BEDROCK_API_KEY)
+def add_auth_header(model, params, request_signer, **kwargs):
+    params['headers']['x-bedrock-api-key'] = LITELLM_API_KEY
+
+def get_bedrock_client():
+    bedrock_client = boto3.client(service_name='bedrock-runtime',
+                                  endpoint_url='http://127.0.0.1:8000',
+                                  config=config)
+    event_system = bedrock_client.meta.events
+    event_system.register('before-call.*', add_auth_header)
+    return bedrock_client
 
 def stream_conversation(bedrock_client,
                     model_id,
@@ -82,7 +99,8 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s: %(message)s")
 
-    model_id = "amazon.nova-pro-v1:0"
+    # model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    model_id = "litellm-anthropic.claude-3-5-haiku-20241022-v1:0"
     system_prompt = """You are an app that creates playlists for a radio station
       that plays rock and pop music. Only return song names and the artist."""
 
@@ -109,9 +127,7 @@ def main():
     additional_model_fields = {"top_k": top_k}
 
     try:
-        bedrock_client = boto3.client(service_name='bedrock-runtime',
-                                      endpoint_url='http://172.17.0.1:4000/')
-        bedrock_client.meta.events.register_first('provide-client-params.*', add_auth_header)
+        bedrock_client = get_bedrock_client()
 
         stream_conversation(bedrock_client, model_id, messages,
                         system_prompts, inference_config, additional_model_fields)

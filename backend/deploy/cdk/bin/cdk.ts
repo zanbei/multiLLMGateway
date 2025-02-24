@@ -42,9 +42,8 @@ export class LitellmStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
-    // const suffix = Math.random().toString(36).substring(2, 6);
-    const suffix = 'gz77'
-
+    // const suffix = 'auth'+Math.random().toString(36).substring(2, 6);
+    const suffix = 'authcpb4'
     const vpc = new ec2.Vpc(this, 'MyVpc', {
       maxAzs: 2, // Maximum Availability Zones
     });
@@ -184,8 +183,10 @@ export class LitellmStack extends cdk.Stack {
         AWS_DEFAULT_REGION: 'cn-northwest-1',
         LITELLM_CONFIG_BUCKET_NAME: configBucket.bucketName,
         LITELLM_LOG: 'DEBUG',
+        BEDROCK_RUNTIME_ENDPOINT: 'process.env.BEDROCK_RUNTIME_ENDPOINT',
         DEEPSEEK_KEY: process.env.DEEPSEEK_KEY || '',
         DATA_BASE_URL: `postgresql://clusteradmin:Qwer1234@${rdsCluster.clusterEndpoint.hostname}:5432/litellm`,
+        MASTER_KEY: `sk-${suffix}`,
       },
       portMappings: [{ containerPort: 4000 }],
       // healthCheck: {  // 添加健康检查配置
@@ -201,40 +202,40 @@ export class LitellmStack extends cdk.Stack {
     });
 
     
-    // const LitellmService = new ecs.FargateService(this, 'LitellmService', {
-    //   cluster: ecsCluster,
-    //   taskDefinition,
-    //   desiredCount: 1,
-    //   assignPublicIp: true,
-    //   vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC},
-    //   securityGroups: [securityGroup], 
-    //   cloudMapOptions: {
-    //     cloudMapNamespace: namespace,
-    //     name: 'litellm', // 服务名称
-    //   },
-    // });
-
-    const loadBalancedFargateService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'LitellmService', {
-      cluster: ecsCluster, 
-      taskDefinition: taskDefinition,
+    const LitellmService = new ecs.FargateService(this, 'LitellmService', {
+      cluster: ecsCluster,
+      taskDefinition,
       desiredCount: 1,
-      publicLoadBalancer: true, 
-      securityGroups: [securityGroup],
-      taskSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       assignPublicIp: true,
-      listenerPort: 443,
-      certificate: acm.Certificate.fromCertificateArn(this, 'litellm', certificateArn), 
-      protocol: elbv2.ApplicationProtocol.HTTPS,
+      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC},
+      securityGroups: [securityGroup], 
       cloudMapOptions: {
         cloudMapNamespace: namespace,
         name: 'litellm', // 服务名称
       },
     });
+
+    // const loadBalancedFargateService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'LitellmService', {
+    //   cluster: ecsCluster, 
+    //   taskDefinition: taskDefinition,
+    //   desiredCount: 1,
+    //   publicLoadBalancer: true, 
+    //   securityGroups: [securityGroup],
+    //   taskSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+    //   assignPublicIp: true,
+    //   listenerPort: 443,
+    //   certificate: acm.Certificate.fromCertificateArn(this, 'litellm', certificateArn), 
+    //   protocol: elbv2.ApplicationProtocol.HTTPS,
+    //   cloudMapOptions: {
+    //     cloudMapNamespace: namespace,
+    //     name: 'litellm', // 服务名称
+    //   },
+    // });
     
     // 返回记录名称
     // const recordName = `litellm.${namespace.namespaceName}`;
 
-    loadBalancedFargateService.node.addDependency(rdsCluster);
+    
 
     const ecrRepoProxy = ecr.Repository.fromRepositoryName(this, 'proxyrepo', 'proxy');
 
@@ -258,7 +259,7 @@ export class LitellmStack extends cdk.Stack {
         OPENAI_API_URL: `http://litellm.litellm_${suffix}:4000/v1/chat/completions`, // service discovery的路径
         AWS_SECRET_ACCESS_KEY: process.env.GLOBAL_AWS_SECRET_ACCESS_KEY || '',
         AWS_ACCESS_KEY_ID: process.env.GLOBAL_AWS_ACCESS_KEY_ID || '',
-        LITELLM_MASTER_KEY: 'sk-7654',
+        LITELLM_MASTER_KEY: `sk-${suffix}`,
         LITELLM_ENDPOINT: `http://litellm.litellm_${suffix}:4000`,
       },
       portMappings: [{ containerPort: 8000,
@@ -266,20 +267,38 @@ export class LitellmStack extends cdk.Stack {
         protocol: ecs.Protocol.TCP,}],
     });
 
-    const proxyService = new ecs.FargateService(this, 'ProxyService', {
+    // const proxyService = new ecs.FargateService(this, 'ProxyService', {
+    //   cluster: ecsCluster, 
+    //   taskDefinition: taskDefinitionProxy,
+    //   desiredCount: 1,
+    //   securityGroups: [securityGroup],
+    //   vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+    //   assignPublicIp: true,
+    //   cloudMapOptions: {
+    //     cloudMapNamespace: namespace,
+    //     name: 'proxy', // 服务名称
+    //   },
+    // });
+    const loadBalancedFargateService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'ProxyService', {
       cluster: ecsCluster, 
       taskDefinition: taskDefinitionProxy,
       desiredCount: 1,
+      publicLoadBalancer: true, 
       securityGroups: [securityGroup],
-      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      taskSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       assignPublicIp: true,
+      listenerPort: 1443,
+      certificate: acm.Certificate.fromCertificateArn(this, 'proxy', certificateArn), 
+      protocol: elbv2.ApplicationProtocol.HTTPS,
       cloudMapOptions: {
         cloudMapNamespace: namespace,
         name: 'proxy', // 服务名称
       },
     });
-    proxyService.node.addDependency(loadBalancedFargateService);
+  
 
+    // proxyService.node.addDependency(loadBalancedFargateService);
+    // loadBalancedFargateService.node.addDependency(rdsCluster);
     // Configure the health check
     
     loadBalancedFargateService.targetGroup.configureHealthCheck({
@@ -352,5 +371,5 @@ export class LitellmStack extends cdk.Stack {
   }
 }
 
-new LitellmStack(app, 'BackLlm', {
+new LitellmStack(app, 'rdsauth', {
 });

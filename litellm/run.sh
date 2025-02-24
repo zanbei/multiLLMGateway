@@ -1,4 +1,4 @@
-docker run -d \
+docker run -d --rm --name litellm \
     -v $(pwd)/litellm_config.yaml:/app/config.yaml \
     -p 4000:4000 \
     ghcr.io/berriai/litellm:main-v1.58.2 \

@@ -74,7 +74,79 @@ The service can be deployed to AWS using either CDK or Terraform. See the respec
 The service can be configured using environment variables or configuration files:
 
 - `log_conf.yaml`: Logging configuration
+- `LITELLM_ENDPOINT`: URL of the LiteLLM service
+- `LITELLM_MASTER_KEY`: Master key for the LiteLLM service
 
+## API Documentation
+
+### Health Check
+```http
+GET /health
+```
+Returns the health status of the service.
+
+**Response**
+```json
+{
+    "status": "ok"
+}
+```
+
+### Chat Completion
+```http
+POST /model/{model_id}/converse
+```
+Send a chat completion request to a specific model. See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html for detailed API spec.
+
+You need to add your API Key in the following format in header:
+
+```
+x-bedrock-api-key=<Your API Key>
+```
+
+### Streaming Chat Completion
+```http
+POST /model/{model_id}/converse-stream
+```
+Send a streaming chat completion request to a specific model. See https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html  for detailed API spec.
+
+You need to add your API Key in the following format in header:
+
+```
+x-bedrock-api-key=<Your API Key>
+```
+
+### Register for API Key
+```http
+POST /register
+```
+Register and generate an API key using AWS credentials.
+
+**Parameters**
+Headers OR Body (one of the following):
+- Headers:
+  - `Authorization`: AWS credential string in the format `Credential=YOUR_AWS_ACCESS_KEY/...`
+- Body:
+  ```json
+  {
+      "accesskey": "YOUR_AWS_ACCESS_KEY"
+  }
+  ```
+
+**Response**
+Returns a generated API key from the LiteLLM service.
+
+**Example Response**
+```json
+{
+    "key": "generated-api-key",
+    "expires": "expiration-timestamp"
+}
+```
+
+**Error Responses**
+- `400 Bad Request`: Invalid credential format
+- `500 Internal Server Error`: LiteLLM configuration issues or key generation failures
 
 ## Logging
 
