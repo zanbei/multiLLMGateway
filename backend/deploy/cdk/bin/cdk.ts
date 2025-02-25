@@ -22,14 +22,16 @@ import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
 import { Duration } from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-const certificateArn = 'arn:aws-cn:acm:cn-northwest-1:969422986683:certificate/cec15978-963c-42a7-a137-4a8ecdb703ff';
+const certificateArn = '<your ACM certificate ARN>';
 
 // 运行前export以下环境变量
 // export GLOBAL_AWS_SECRET_ACCESS_KEY='your_secret_access_key'
 // export GLOBAL_AWS_ACCESS_KEY_ID='your_access_key_id'
 // export DEEPSEEK_KEY='your_deepseek_key'
+// export MASTER_KEY='your_master_key'
+// export LITELLM_MASTER_KEY='your_master_key'
 
-// ../config/litellm_config.yaml里面有master_key，需要修改为自己的key,并修改proxy的LITELLM_MASTER_KEY
+
 // keyName需要修改为自己的key
 // ACM证书需要指定以开通443端口  默认证书名字为litellm
 // 国内dockerhub无法访问，需要使用国内的镜像源，并且手动上传到ECR,并修改代码中的镜像地址.默认repo为litellm和proxy
@@ -42,8 +44,8 @@ export class LitellmStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
-    // const suffix = 'auth'+Math.random().toString(36).substring(2, 6);
-    const suffix = 'authcpb4'
+    const suffix = 'auth'+Math.random().toString(36).substring(2, 6);
+    // const suffix = 'authcpb4'
     const vpc = new ec2.Vpc(this, 'MyVpc', {
       maxAzs: 2, // Maximum Availability Zones
     });
@@ -73,7 +75,7 @@ export class LitellmStack extends cdk.Stack {
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, // 使用公共子网
       securityGroup,
-      keyName: 'nx2007' // 密钥对名称（不需要 .pem 后缀）
+      keyName: '<your key name>' // 密钥对名称（不需要 .pem 后缀）
     });
 
     
@@ -112,7 +114,7 @@ export class LitellmStack extends cdk.Stack {
     // 创建 Aurora Serverless v2 数据库
     const rdsCluster = new rds.DatabaseCluster(this, 'AuroraClusterV2', {
       engine: rds.DatabaseClusterEngine.auroraPostgres({ version: rds.AuroraPostgresEngineVersion.VER_15_5 }),
-      credentials: { username: 'clusteradmin',password: cdk.SecretValue.plainText('Qwer1234') },
+      credentials: { username: '<username>',password: cdk.SecretValue.plainText('<password>') },
       clusterIdentifier: `litellm-${suffix}`,
       writer: rds.ClusterInstance.serverlessV2('writer'),
       serverlessV2MinCapacity: 1,
@@ -185,7 +187,7 @@ export class LitellmStack extends cdk.Stack {
         LITELLM_LOG: 'DEBUG',
         BEDROCK_RUNTIME_ENDPOINT: 'process.env.BEDROCK_RUNTIME_ENDPOINT',
         DEEPSEEK_KEY: process.env.DEEPSEEK_KEY || '',
-        DATA_BASE_URL: `postgresql://clusteradmin:Qwer1234@${rdsCluster.clusterEndpoint.hostname}:5432/litellm`,
+        DATA_BASE_URL: `postgresql://<username>:<password>@${rdsCluster.clusterEndpoint.hostname}:5432/litellm`,
         MASTER_KEY: `sk-${suffix}`,
       },
       portMappings: [{ containerPort: 4000 }],
