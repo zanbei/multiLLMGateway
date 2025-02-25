@@ -20,15 +20,14 @@ config = Config(
 LITELLM_API_KEY="sk-7654"
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 def add_auth_header(model, params, request_signer, **kwargs):
     params['headers']['x-bedrock-api-key'] = LITELLM_API_KEY
 
 def get_bedrock_client():
     bedrock_client = boto3.client(service_name='bedrock-runtime',
-                                  endpoint_url='http://127.0.0.1:8000',
-                                  config=config)
+                                    endpoint_url='<your cfn output>', config=config,region_name='cn-northwest-1')
     event_system = bedrock_client.meta.events
     event_system.register('before-call.*', add_auth_header)
     return bedrock_client
@@ -57,7 +56,7 @@ def generate_conversation(bedrock_client,
     # top_k = 200
 
     # Base inference parameters to use.
-    inference_config = {"temperature": temperature}
+    inference_config = {"temperature": temperature,"maxTokens": 20}
     # Additional inference parameters to use.
     # additional_model_fields = {"top_k": top_k}
 
@@ -86,8 +85,9 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         format="%(levelname)s: %(message)s")
 
-    model_id = "litellm-anthropic.claude-3-5-sonnet-20241022-v2:0"
-    # model_id = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    # model_id = "bedrock-nova-v1"
+    model_id = "bedrock-claude-35"
+
     # Setup the system prompts and messages to send to the model.
     system_prompts = [{"text": "You are an app that creates playlists for a radio station that plays rock and pop music."
                        "Only return song names and the artist."}]
@@ -95,10 +95,7 @@ def main():
         "role": "user",
         "content": [{"text": "Create a list of 3 pop songs."}]
     }
-    message_2 = {
-        "role": "user",
-        "content": [{"text": "Make sure the songs are by artists from the United Kingdom."}]
-    }
+
     messages = []
 
     try:
@@ -114,13 +111,7 @@ def main():
         output_message = response['output']['message']
         messages.append(output_message)
 
-        # Continue the conversation with the 2nd message.
-        messages.append(message_2)
-        response = generate_conversation(
-            bedrock_client, model_id, system_prompts, messages)
-
-        output_message = response['output']['message']
-        messages.append(output_message)
+        
 
         # Show the complete conversation.
         for message in messages:

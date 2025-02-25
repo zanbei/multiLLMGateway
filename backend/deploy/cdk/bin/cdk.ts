@@ -5,7 +5,7 @@ import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
-// import * as rds from 'aws-cdk-lib/aws-rds';
+import * as rds from 'aws-cdk-lib/aws-rds';
 import * as s3Deploy from 'aws-cdk-lib/aws-s3-deployment'; 
 import * as logs from 'aws-cdk-lib/aws-logs'; 
 import * as ec2 from 'aws-cdk-lib/aws-ec2'; 
@@ -22,12 +22,21 @@ import * as ecs_patterns from 'aws-cdk-lib/aws-ecs-patterns';
 import { Duration } from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-const certificateArn = 'arn:aws-cn:acm:cn-northwest-1:969422986683:certificate/a02b38a3-0c3d-4b7b-a518-98cc2180b220';
+const certificateArn = '<your ACM certificate ARN>';
 
 // 运行前export以下环境变量
 // export GLOBAL_AWS_SECRET_ACCESS_KEY='your_secret_access_key'
 // export GLOBAL_AWS_ACCESS_KEY_ID='your_access_key_id'
 // export DEEPSEEK_KEY='your_deepseek_key'
+// export MASTER_KEY='your_master_key'
+// export LITELLM_MASTER_KEY='your_master_key'
+
+
+// keyName需要修改为自己的key
+// ACM证书需要指定以开通443端口  默认证书名字为litellm
+// 国内dockerhub无法访问，需要使用国内的镜像源，并且手动上传到ECR,并修改代码中的镜像地址.默认repo为litellm和proxy
+// 如果用的是max arm架构, docker buildx build --platform=linux/amd64 -t <image-name> .
+
 
 const app = new cdk.App(); 
 
@@ -35,6 +44,8 @@ export class LitellmStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
+    const suffix = 'auth'+Math.random().toString(36).substring(2, 6);
+    // const suffix = 'authcpb4'
     const vpc = new ec2.Vpc(this, 'MyVpc', {
       maxAzs: 2, // Maximum Availability Zones
     });
@@ -47,7 +58,7 @@ export class LitellmStack extends cdk.Stack {
     
     securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow HTTP traffic');
     securityGroup.addIngressRule(securityGroup, ec2.Port.tcp(4000), 'Allow HTTPS traffic');
-    securityGroup.addIngressRule(securityGroup, ec2.Port.tcp(3306), 'Allow HTTPS traffic');
+    securityGroup.addIngressRule(securityGroup, ec2.Port.tcp(5432), 'Allow HTTPS traffic');
     securityGroup.addIngressRule(securityGroup, ec2.Port.tcp(8000), 'Allow HTTPS traffic');
 
     // 创建公共 EC2 实例
@@ -58,17 +69,16 @@ export class LitellmStack extends cdk.Stack {
       {os: ec2.OperatingSystemType.LINUX,}
     );
 
-    const instance = new ec2.Instance(this, 'bastion', {
+    const instance = new ec2.Instance(this, `litellm-${suffix}`, {
       instanceType: new ec2.InstanceType('t3.medium'), // 实例类型
       machineImage: machineImage,
       vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC }, // 使用公共子网
       securityGroup,
-      keyName: 'nx2007' // 密钥对名称（不需要 .pem 后缀）
+      keyName: '<your key name>' // 密钥对名称（不需要 .pem 后缀）
     });
 
-    // const suffix = Math.random().toString(36).substring(2, 6);
-    const suffix = 'gz76'
+    
 
     // china region 的 cdk-ecr-deployment 无法使用，原因是lambda无法下载public ecr
 
@@ -101,22 +111,27 @@ export class LitellmStack extends cdk.Stack {
       destinationBucket: configBucket,
     });
 
-    // const rdsCluster = new rds.ServerlessCluster(this, `litellm-${suffix}`, {
-    //   engine: rds.DatabaseClusterEngine.auroraPostgres({
-    //     version: rds.AuroraPostgresEngineVersion.VER_15_2 }),
-    //   vpc: vpc,
-    //   scaling: {
-    //     autoPause: cdk.Duration.minutes(10), // Auto pause after 10 minutes of inactivity
-    //     minCapacity: rds.AuroraCapacityUnit.ACU_1, // Minimum capacity
-    //     maxCapacity: rds.AuroraCapacityUnit.ACU_4, // Maximum capacity
-    //   },
-    //   credentials: rds.Credentials.fromPassword('anbei', cdk.SecretValue.plainText('Qwer1234')),
-    //   defaultDatabaseName: 'litellm',  // Optional: specify a database name
-    // });
+    // 创建 Aurora Serverless v2 数据库
+    const rdsCluster = new rds.DatabaseCluster(this, 'AuroraClusterV2', {
+      engine: rds.DatabaseClusterEngine.auroraPostgres({ version: rds.AuroraPostgresEngineVersion.VER_15_5 }),
+      credentials: { username: '<username>',password: cdk.SecretValue.plainText('<password>') },
+      clusterIdentifier: `litellm-${suffix}`,
+      writer: rds.ClusterInstance.serverlessV2('writer'),
+      serverlessV2MinCapacity: 1,
+      serverlessV2MaxCapacity: 3,
+      vpc,
+      securityGroups: [securityGroup],
+      defaultDatabaseName: 'litellm',
+      enableDataApi: true, // 启用 Data API
+      enableClusterLevelEnhancedMonitoring: false, // 禁用集群级别的增强监控
+      enablePerformanceInsights: false, // 禁用性能洞察
+    });
+
 
     const ecsTaskExecutionRole = new iam.Role(this, 'EcsTaskExecutionRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
+
     // 创建 ECR 权限策略
     const ecrPolicy = new iam.Policy(this, 'EcrPolicy', {
       statements: [
@@ -139,6 +154,12 @@ export class LitellmStack extends cdk.Stack {
     const ecsCluster = new ecs.Cluster(this, 'LitellmCluster', {
       clusterName: `litellm_${suffix}`,
       vpc: vpc,
+    });
+
+    // 创建 Cloud Map 命名空间
+    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'MyNamespace', {
+      name: `litellm_${suffix}`,
+      vpc,
     });
 
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'LitellmTask', {
@@ -164,20 +185,25 @@ export class LitellmStack extends cdk.Stack {
         AWS_DEFAULT_REGION: 'cn-northwest-1',
         LITELLM_CONFIG_BUCKET_NAME: configBucket.bucketName,
         LITELLM_LOG: 'DEBUG',
+        BEDROCK_RUNTIME_ENDPOINT: 'process.env.BEDROCK_RUNTIME_ENDPOINT',
         DEEPSEEK_KEY: process.env.DEEPSEEK_KEY || '',
-        DATA_BASE_URL: '',
+        DATA_BASE_URL: `postgresql://<username>:<password>@${rdsCluster.clusterEndpoint.hostname}:5432/litellm`,
+        MASTER_KEY: `sk-${suffix}`,
       },
       portMappings: [{ containerPort: 4000 }],
+      // healthCheck: {  // 添加健康检查配置
+      //   command: [
+      //     'CMD-SHELL',
+      //     'curl -f http://localhost:4000/health/readiness || exit 1', 
+      //   ],
+      //   interval: cdk.Duration.seconds(30),   // 每 30 秒检查一次
+      //   timeout: cdk.Duration.seconds(5),    // 超时时间为 5 秒
+      //   startPeriod: cdk.Duration.seconds(120), // 启动后等待 60 秒开始检查
+      //   retries: 3,                       // 失败重试 3 次
+      // }
     });
 
     
-
-    // 创建 Cloud Map 命名空间
-    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'MyNamespace', {
-      name: 'litellm.local',
-      vpc,
-    });
-
     const LitellmService = new ecs.FargateService(this, 'LitellmService', {
       cluster: ecsCluster,
       taskDefinition,
@@ -191,8 +217,27 @@ export class LitellmStack extends cdk.Stack {
       },
     });
 
+    // const loadBalancedFargateService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'LitellmService', {
+    //   cluster: ecsCluster, 
+    //   taskDefinition: taskDefinition,
+    //   desiredCount: 1,
+    //   publicLoadBalancer: true, 
+    //   securityGroups: [securityGroup],
+    //   taskSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+    //   assignPublicIp: true,
+    //   listenerPort: 443,
+    //   certificate: acm.Certificate.fromCertificateArn(this, 'litellm', certificateArn), 
+    //   protocol: elbv2.ApplicationProtocol.HTTPS,
+    //   cloudMapOptions: {
+    //     cloudMapNamespace: namespace,
+    //     name: 'litellm', // 服务名称
+    //   },
+    // });
+    
     // 返回记录名称
-    const recordName = `${LitellmService.serviceName}.${namespace.namespaceName}`;
+    // const recordName = `litellm.${namespace.namespaceName}`;
+
+    
 
     const ecrRepoProxy = ecr.Repository.fromRepositoryName(this, 'proxyrepo', 'proxy');
 
@@ -213,15 +258,29 @@ export class LitellmStack extends cdk.Stack {
       }),
       environment: {
         AWS_REGION_NAME: 'us-west-2',
-        OPENAI_API_URL: `http://litellm.litellm.local:4000/v1/chat/completions`, // service discovery
+        OPENAI_API_URL: `http://litellm.litellm_${suffix}:4000/v1/chat/completions`, // service discovery的路径
         AWS_SECRET_ACCESS_KEY: process.env.GLOBAL_AWS_SECRET_ACCESS_KEY || '',
         AWS_ACCESS_KEY_ID: process.env.GLOBAL_AWS_ACCESS_KEY_ID || '',
+        LITELLM_MASTER_KEY: `sk-${suffix}`,
+        LITELLM_ENDPOINT: `http://litellm.litellm_${suffix}:4000`,
       },
       portMappings: [{ containerPort: 8000,
         hostPort: 8000,
         protocol: ecs.Protocol.TCP,}],
     });
 
+    // const proxyService = new ecs.FargateService(this, 'ProxyService', {
+    //   cluster: ecsCluster, 
+    //   taskDefinition: taskDefinitionProxy,
+    //   desiredCount: 1,
+    //   securityGroups: [securityGroup],
+    //   vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+    //   assignPublicIp: true,
+    //   cloudMapOptions: {
+    //     cloudMapNamespace: namespace,
+    //     name: 'proxy', // 服务名称
+    //   },
+    // });
     const loadBalancedFargateService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'ProxyService', {
       cluster: ecsCluster, 
       taskDefinition: taskDefinitionProxy,
@@ -230,7 +289,7 @@ export class LitellmStack extends cdk.Stack {
       securityGroups: [securityGroup],
       taskSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       assignPublicIp: true,
-      listenerPort: 443,
+      listenerPort: 1443,
       certificate: acm.Certificate.fromCertificateArn(this, 'proxy', certificateArn), 
       protocol: elbv2.ApplicationProtocol.HTTPS,
       cloudMapOptions: {
@@ -238,6 +297,10 @@ export class LitellmStack extends cdk.Stack {
         name: 'proxy', // 服务名称
       },
     });
+  
+
+    // proxyService.node.addDependency(loadBalancedFargateService);
+    // loadBalancedFargateService.node.addDependency(rdsCluster);
     // Configure the health check
     
     loadBalancedFargateService.targetGroup.configureHealthCheck({
@@ -310,5 +373,5 @@ export class LitellmStack extends cdk.Stack {
   }
 }
 
-new LitellmStack(app, 'BackLlm1', {
+new LitellmStack(app, 'rdsauth', {
 });
