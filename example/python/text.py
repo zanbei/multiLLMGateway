@@ -27,7 +27,7 @@ def add_auth_header(model, params, request_signer, **kwargs):
 
 def get_bedrock_client():
     bedrock_client = boto3.client(service_name='bedrock-runtime',
-                                    endpoint_url='https://bty2zxzdnz8p.anbeisayyes.top:1443/', config=config,region_name='cn-northwest-1')
+                                    endpoint_url='<your cfn output>', config=config,region_name='cn-northwest-1')
     event_system = bedrock_client.meta.events
     event_system.register('before-call.*', add_auth_header)
     return bedrock_client
