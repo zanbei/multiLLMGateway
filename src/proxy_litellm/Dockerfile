@@ -1,5 +1,5 @@
 # Use Python 3.12 slim as base image for smaller size
-FROM python:3.12-slim AS builder
+FROM public.ecr.aws/docker/library/python:3.12-slim AS builder
 
 # Set working directory
 WORKDIR /app
