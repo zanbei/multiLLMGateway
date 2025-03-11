@@ -25,6 +25,7 @@ import {
   LOCAL_STORAGE_ENDPOINT_NAME,
   LOCAL_STORAGE_SK_NAME,
 } from "../consts";
+import * as showdown from "showdown";
 
 const KNOWN_MODEL_IDS = ["anthropic.claude-3-haiku-20240307-v1:0"];
 
@@ -34,6 +35,7 @@ export default function Chat() {
   const [promptDisabled, setPromptDisabled] = useState(false);
   const [messages, setMessages] = useState([] as Message[]);
   const [modelId, setModelId] = useState(KNOWN_MODEL_IDS[0]);
+  const converter = new showdown.Converter();
 
   function prepareBedrock(): BedrockRuntimeClient {
     const bedrock = new BedrockRuntimeClient({
@@ -87,13 +89,17 @@ export default function Chat() {
     const text = response.output?.message?.content?.[0].text;
     if (text) {
       const ms = messages.slice();
-      ms.at(-1)!.content += text;
+      // TODO: is the generated HTML cleaned?
+      ms.at(-1)!.content = (
+        <div dangerouslySetInnerHTML={{ __html: converter.makeHtml(text) }} />
+      );
       setMessages(ms);
     }
   }
 
   async function converseStream(messages: Message[]) {
     const bedrock = prepareBedrock();
+    let content = "";
 
     const response = await bedrock.send(
       new ConverseStreamCommand({
@@ -114,7 +120,13 @@ export default function Chat() {
         const message = chunk.delta.text;
         if (message) {
           const ms = messages.slice();
-          ms.at(-1)!.content += message;
+          content += message;
+          // TODO: is the generated HTML cleaned?
+          ms.at(-1)!.content = (
+            <div
+              dangerouslySetInnerHTML={{ __html: converter.makeHtml(content) }}
+            />
+          );
           setMessages(ms);
         }
       }
