@@ -12,13 +12,14 @@ import {
 
 export type Message = ChatBubbleMessage | AlertMessage;
 
-type ChatBubbleMessage = {
+export type ChatBubbleMessage = {
   type: "chat-bubble";
   authorId: string;
   content: React.ReactNode;
   actions?: React.ReactNode;
   hideAvatar?: boolean;
   avatarLoading?: boolean;
+  sendingFailed?: boolean;
 };
 
 type AlertMessage = {

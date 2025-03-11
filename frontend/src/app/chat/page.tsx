@@ -13,7 +13,7 @@ import {
 import { useState } from "react";
 import Messages from "./messages";
 import { ScrollableContainer } from "./common";
-import { INITIAL_MESSAGES, Message } from "./config";
+import { ChatBubbleMessage, INITIAL_MESSAGES, Message } from "./config";
 import {
   BedrockRuntimeClient,
   ConverseCommand,
@@ -73,9 +73,12 @@ export default function Chat() {
         modelId,
         messages: messages
           .slice(0, -1)
-          .filter((m) => m.type == "chat-bubble")
+          .filter((m) => m.type == "chat-bubble" && !m.sendingFailed)
           .map((message) => ({
-            role: message.authorId == "user" ? "user" : "assistant",
+            role:
+              (message as ChatBubbleMessage).authorId == "user"
+                ? "user"
+                : "assistant",
             content: [{ text: message.content!.toString() }],
           })),
       })
@@ -144,6 +147,9 @@ export default function Chat() {
         .catch((e) => {
           console.error(e);
           const ms = newMessages.slice(0, -1);
+          const userMsg = ms.at(-1)! as ChatBubbleMessage;
+          userMsg.sendingFailed = true;
+          userMsg.content += ` (Not sent)`;
           ms.push({
             type: "alert",
             content: e.message,
