@@ -136,7 +136,6 @@ export default function Chat() {
 
       (streaming ? converseStream(newMessages) : converse(newMessages))
         .then(() => {
-          setPromptDisabled(false);
           const ms = newMessages.slice();
           const msg = ms.at(-1)!;
           if (msg.type == "chat-bubble") msg.avatarLoading = false;
@@ -144,12 +143,15 @@ export default function Chat() {
         })
         .catch((e) => {
           console.error(e);
-          const ms = newMessages.slice();
+          const ms = newMessages.slice(0, -1);
           ms.push({
             type: "alert",
             content: e.message,
           });
           setMessages(ms);
+        })
+        .finally(() => {
+          setPromptDisabled(false);
         });
     }
   }
