@@ -65,6 +65,19 @@ class OpenAIHandler(BaseHandler):
             request["max_tokens"] = bedrock_request["max_tokens"]
         if "stream" in bedrock_request:
             request["stream"] = bedrock_request["stream"]
+            
+        # Extract parameters from inferenceConfig if present
+        inference_config = bedrock_request.get("inferenceConfig", {})
+        if inference_config:
+            logger.debug(f"Found inferenceConfig: {inference_config}")
+            if "temperature" in inference_config:
+                request["temperature"] = inference_config["temperature"]
+            if "maxTokens" in inference_config:
+                request["max_tokens"] = inference_config["maxTokens"]
+            if "topP" in inference_config:
+                request["top_p"] = inference_config["topP"]
+            if "stopSequences" in inference_config:
+                request["stop"] = inference_config["stopSequences"]
 
         return request
 
