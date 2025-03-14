@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "@cloudscape-design/global-styles/index.css";
 import ClientLayout from "./layout.client";
+import { FRONTEND_NAME } from "./consts";
 
 export const metadata: Metadata = {
-  title: "Bedrock CN",
-  description: "Bedrock CN",
+  title: FRONTEND_NAME,
+  description: FRONTEND_NAME,
 };
 
 export default function RootLayout({

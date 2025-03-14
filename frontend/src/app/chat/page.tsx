@@ -20,6 +20,7 @@ import {
   ConverseStreamCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import {
+  FRONTEND_NAME,
   LOCAL_STORAGE_AK_NAME,
   LOCAL_STORAGE_BEDROCK_API_KEY_NAME,
   LOCAL_STORAGE_ENDPOINT_NAME,
@@ -178,7 +179,7 @@ export default function Chat() {
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <BreadcrumbGroup
         items={[
-          { text: "Bedrock CN", href: "/" },
+          { text: FRONTEND_NAME, href: "/" },
           { text: "Chat / Text playground", href: "/chat" },
         ]}
       />

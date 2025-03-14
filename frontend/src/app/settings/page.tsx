@@ -13,6 +13,7 @@ import {
   StatusIndicator,
 } from "@cloudscape-design/components";
 import {
+  FRONTEND_NAME,
   LOCAL_STORAGE_AK_NAME,
   LOCAL_STORAGE_BEDROCK_API_KEY_NAME,
   LOCAL_STORAGE_ENDPOINT_NAME,
@@ -36,7 +37,7 @@ export default function Settings() {
     <div>
       <BreadcrumbGroup
         items={[
-          { text: "Bedrock CN", href: "/" },
+          { text: FRONTEND_NAME, href: "/" },
           { text: "Settings", href: "/settings" },
         ]}
       />
