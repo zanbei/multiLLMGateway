@@ -13,7 +13,7 @@ import {
 import { useState } from "react";
 import Messages from "./messages";
 import { ScrollableContainer } from "./common";
-import { INITIAL_MESSAGES, Message } from "./config";
+import { ChatBubbleMessage, INITIAL_MESSAGES, Message } from "./config";
 import {
   BedrockRuntimeClient,
   ConverseCommand,
@@ -25,6 +25,7 @@ import {
   LOCAL_STORAGE_ENDPOINT_NAME,
   LOCAL_STORAGE_SK_NAME,
 } from "../consts";
+import * as showdown from "showdown";
 
 const KNOWN_MODEL_IDS = ["anthropic.claude-3-haiku-20240307-v1:0"];
 
@@ -34,6 +35,7 @@ export default function Chat() {
   const [promptDisabled, setPromptDisabled] = useState(false);
   const [messages, setMessages] = useState([] as Message[]);
   const [modelId, setModelId] = useState(KNOWN_MODEL_IDS[0]);
+  const converter = new showdown.Converter();
 
   function prepareBedrock(): BedrockRuntimeClient {
     const bedrock = new BedrockRuntimeClient({
@@ -73,9 +75,12 @@ export default function Chat() {
         modelId,
         messages: messages
           .slice(0, -1)
-          .filter((m) => m.type == "chat-bubble")
+          .filter((m) => m.type == "chat-bubble" && !m.sendingFailed)
           .map((message) => ({
-            role: message.authorId == "user" ? "user" : "assistant",
+            role:
+              (message as ChatBubbleMessage).authorId == "user"
+                ? "user"
+                : "assistant",
             content: [{ text: message.content!.toString() }],
           })),
       })
@@ -84,13 +89,17 @@ export default function Chat() {
     const text = response.output?.message?.content?.[0].text;
     if (text) {
       const ms = messages.slice();
-      ms.at(-1)!.content += text;
+      // TODO: is the generated HTML cleaned?
+      ms.at(-1)!.content = (
+        <div dangerouslySetInnerHTML={{ __html: converter.makeHtml(text) }} />
+      );
       setMessages(ms);
     }
   }
 
   async function converseStream(messages: Message[]) {
     const bedrock = prepareBedrock();
+    let content = "";
 
     const response = await bedrock.send(
       new ConverseStreamCommand({
@@ -111,7 +120,13 @@ export default function Chat() {
         const message = chunk.delta.text;
         if (message) {
           const ms = messages.slice();
-          ms.at(-1)!.content += message;
+          content += message;
+          // TODO: is the generated HTML cleaned?
+          ms.at(-1)!.content = (
+            <div
+              dangerouslySetInnerHTML={{ __html: converter.makeHtml(content) }}
+            />
+          );
           setMessages(ms);
         }
       }
@@ -136,7 +151,6 @@ export default function Chat() {
 
       (streaming ? converseStream(newMessages) : converse(newMessages))
         .then(() => {
-          setPromptDisabled(false);
           const ms = newMessages.slice();
           const msg = ms.at(-1)!;
           if (msg.type == "chat-bubble") msg.avatarLoading = false;
@@ -144,12 +158,18 @@ export default function Chat() {
         })
         .catch((e) => {
           console.error(e);
-          const ms = newMessages.slice();
+          const ms = newMessages.slice(0, -1);
+          const userMsg = ms.at(-1)! as ChatBubbleMessage;
+          userMsg.sendingFailed = true;
+          userMsg.content += ` (Not sent)`;
           ms.push({
             type: "alert",
             content: e.message,
           });
           setMessages(ms);
+        })
+        .finally(() => {
+          setPromptDisabled(false);
         });
     }
   }
