@@ -5,13 +5,14 @@ import {
   Header,
   BreadcrumbGroup,
 } from "@cloudscape-design/components";
+import { FRONTEND_NAME } from "./consts";
 
 export default function Home() {
   return (
     <div>
       <BreadcrumbGroup
         items={[
-          { text: "Bedrock CN", href: "/" },
+          { text: FRONTEND_NAME, href: "/" },
           { text: "Overview", href: "/" },
         ]}
       />

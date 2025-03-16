@@ -3,6 +3,7 @@ import { AppLayout, SideNavigation } from "@cloudscape-design/components";
 import { I18nProvider } from "@cloudscape-design/components/i18n";
 import messages from "@cloudscape-design/components/i18n/messages/all.en";
 import { useState } from "react";
+import { FRONTEND_NAME } from "./consts";
 
 const LOCALE = "en";
 
@@ -21,7 +22,7 @@ export default function ClientLayout({
           <SideNavigation
             header={{
               href: "/",
-              text: "Bedrock CN",
+              text: FRONTEND_NAME,
             }}
             items={[
               {
@@ -38,7 +39,7 @@ export default function ClientLayout({
               { type: "divider" },
               {
                 type: "section",
-                text: "Bedrock configurations",
+                text: "Configurations",
                 items: [
                   {
                     type: "link",
