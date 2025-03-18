@@ -333,8 +333,8 @@ export class LitellmStack extends cdk.Stack {
       }
     });
     const frontendFn = new lambda.Function(this, "frontend", {
-      runtime: lambda.Runtime.PROVIDED_AL2,
-      handler: "bootstrap",
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: "run.sh",
       memorySize: 2048,
       code: lambda.Code.fromAsset("../src/frontend", {
         bundling: {
@@ -343,12 +343,16 @@ export class LitellmStack extends cdk.Stack {
             "bash",
             "-c",
             [
+              // build frontend, save to $TASK_ROOT/dist
               "npm install",
               "npm run build",
-              "cp -au ./out/* /asset-output",
-              "cp misc/bootstrap /asset-output",
-              "cp misc/nginx.conf /asset-output",
-              "chmod +x /asset-output/bootstrap",
+              "mkdir -p /asset-output/dist",
+              "cp -au ./out/* /asset-output/dist",
+              // copy run.sh to $TASK_ROOT
+              "cp misc/run.sh /asset-output",
+              "chmod +x /asset-output/run.sh",
+              // install http-server to $TASK_ROOT/node_modules
+              "npm install http-server --no-save --no-package-lock --prefix /asset-output",
             ].join(" && "),
           ],
           user: "root",
@@ -356,16 +360,18 @@ export class LitellmStack extends cdk.Stack {
       }),
       environment: {
         PORT: "8080",
+        AWS_LAMBDA_EXEC_WRAPPER: "/opt/bootstrap",
       },
       layers: [
         lambda.LayerVersion.fromLayerVersionArn(
           this,
           "LWALayer",
-          regionMapping.findInMap(this.region, 'lwaLayerArn', `arn:aws:lambda:${this.region}:753240598075:layer:LambdaAdapterLayerX86:24`)
+          regionMapping.findInMap(
+            this.region,
+            "lwaLayerArn",
+            `arn:aws:lambda:${this.region}:753240598075:layer:LambdaAdapterLayerX86:24`
+          )
         ),
-        new lambda.LayerVersion(this, "NginxLayer", {
-          code: lambda.Code.fromAsset("../src/frontend/misc/Nginx123X86.zip"),
-        }),
       ],
     });
     const http = new apigw.HttpApi(this, "PortalApi");
